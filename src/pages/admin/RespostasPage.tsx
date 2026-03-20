@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   formularios, getPerguntasByFormulario, getRespostasByFormulario,
@@ -12,8 +12,17 @@ export default function RespostasPage() {
   const formularioId = Number(id);
   const formulario = formularios.find(f => f.id === formularioId);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos'>('dashboard');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setTimeout(() => setIsLoading(false), 800);
+  }, []);
 
   if (!formulario) return <p className="text-destructive">Formulário não encontrado.</p>;
+
+  if (isLoading) {
+    return <p className="text-destructive">Carregando...</p>;
+  }
 
   const perguntas = getPerguntasByFormulario(formularioId);
   const respostas = getRespostasByFormulario(formularioId);

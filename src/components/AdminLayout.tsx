@@ -1,21 +1,33 @@
 import { useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
-import { isAuthenticated, logout } from "@/lib/auth";
-import { LogOut, ChevronRight } from "lucide-react";
+import { LogOut, ChevronRight, User, Shield } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/AuthContext";
+import { ROLE_LABELS, ROLE_COLORS } from "@/types/auth";
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      navigate("/admin");
+    if (!user) {
+      navigate("/login");
     }
-  }, [navigate]);
+  }, [user, navigate]);
 
   const handleLogout = () => {
     logout();
-    navigate("/admin");
+    navigate("/login");
   };
 
   // Build breadcrumb
@@ -38,7 +50,11 @@ export default function AdminLayout() {
     }
   }
 
-  if (!isAuthenticated()) return null;
+  if (pathParts.includes("usuarios")) {
+    breadcrumbs.push({ label: "Usuários", path: "/admin/usuarios" });
+  }
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -51,13 +67,42 @@ export default function AdminLayout() {
             </div>
             <span className="font-semibold text-[15px] hidden sm:inline">Sistema de Pesquisas</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Sair</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 px-3">
+                  <User className="h-4 w-4" />
+                  <span className="hidden sm:inline">{user.nome}</span>
+                  <Badge className={ROLE_COLORS[user.perfil]} variant="secondary">
+                    {ROLE_LABELS[user.perfil]}
+                  </Badge>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium">{user.nome}</p>
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                  <div className="mt-1">
+                    <Badge className={ROLE_COLORS[user.perfil]} variant="secondary">
+                      <Shield className="h-3 w-3 mr-1" />
+                      {ROLE_LABELS[user.perfil]}
+                    </Badge>
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate("/admin/usuarios")} className="cursor-pointer">
+                  <User className="h-4 w-4 mr-2" />
+                  Usuários
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 

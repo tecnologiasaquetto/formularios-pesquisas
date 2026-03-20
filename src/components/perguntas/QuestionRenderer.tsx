@@ -11,12 +11,13 @@ interface Props {
   pergunta: Pergunta;
   value: any;
   onChange: (val: any) => void;
+  error?: string;
 }
 
-export default function QuestionRenderer({ pergunta, value, onChange }: Props) {
+export default function QuestionRenderer({ pergunta, value, onChange, error }: Props) {
   switch (pergunta.tipo) {
     case 'matriz_nps':
-      return <MatrizNps config={pergunta.config} value={value || {}} onChange={onChange} />;
+      return <MatrizNps config={pergunta.config} value={value || {}} onChange={onChange} error={error} />;
     case 'nps_simples':
       return <NpsSimples config={pergunta.config} value={value} onChange={onChange} />;
     case 'radio':
