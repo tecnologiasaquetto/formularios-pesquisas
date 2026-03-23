@@ -2,19 +2,22 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/theme-provider.tsx";
+import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import LoginPage from "./pages/LoginPage.tsx";
+import LoginPage from "./pages/LoginPage";
 import AdminLayout from "./components/AdminLayout";
-import FormulariosListPage from "./pages/admin/FormulariosListPage.tsx";
-import NovoFormularioPage from "./pages/admin/NovoFormularioPage.tsx";
-import ConstrutorPage from "./pages/admin/ConstrutorPage.tsx";
-import FormSettingsPage from "./pages/admin/FormSettingsPage.tsx";
-import RespostasPage from "./pages/admin/RespostasPage.tsx";
-import UsersPage from "./pages/admin/UsersPage.tsx";
-import PublicFormPage from "./pages/PublicFormPage.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import FormulariosListPage from "./pages/admin/FormulariosListPage";
+import NovoFormularioPage from "./pages/admin/NovoFormularioPage";
+import ConstrutorPage from "./pages/admin/ConstrutorPage";
+import FormSettingsPage from "./pages/admin/FormSettingsPage";
+import RespostasPage from "./pages/admin/RespostasPage";
+import UsersPage from "./pages/admin/UsersPage";
+import PublicFormPage from "./pages/PublicFormPage";
+import NotFound from "./pages/NotFound";
+import TestSupabaseConnection from "./test-supabase-connection";
+import TestSimpleConnection from "./test-simple-connection";
+import TestCorsFix from "./test-cors-fix";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +32,9 @@ const App = () => (
               {/* Public routes */}
               <Route path="/" element={<Navigate to="/admin/formularios" replace />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/test-supabase" element={<TestSupabaseConnection />} />
+              <Route path="/test-connection" element={<TestSimpleConnection />} />
+              <Route path="/test-cors" element={<TestCorsFix />} />
               
               {/* Protected admin routes */}
               <Route path="/admin" element={

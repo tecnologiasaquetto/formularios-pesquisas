@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrigir Chaves Supabase</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .step { background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .success { background: #10b981; color: white; }
+        .error { background: #ef4444; color: white; }
+        .warning { background: #f59e0b; color: white; }
+        .key-box { 
+            background: #1f2937; 
+            color: white; 
+            padding: 15px; 
+            border-radius: 4px; 
+            font-family: monospace; 
+            word-break: break-all; 
+            font-size: 12px;
+            margin: 10px 0;
+            position: relative;
+        }
+        button { 
+            background: #3b82f6; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin: 5px;
+        }
+        button:hover { background: #2563eb; }
+        button.copy { background: #10b981; }
+        button.copy:hover { background: #059669; }
+        .test-result { 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0;
+        }
+        .test-success { background: #d1fae5; border: 1px solid #10b981; color: #065f46; }
+        .test-error { background: #fee2e2; border: 1px solid #ef4444; color: #991b1b; }
+        .test-warning { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Corrigir Chaves Supabase</h1>
+        <p>Esta ferramenta vai validar e corrigir suas chaves do Supabase.</p>
+
+        <div class="step">
+            <h3>📋 Passo 1: Cole suas chaves do Supabase Dashboard</h3>
+            
+            <div>
+                <label class="block text-sm font-medium mb-2">Project URL:</label>
+                <input type="text" id="supabaseUrl" placeholder="https://your-project-id.supabase.co" 
+                       class="w-full p-2 border rounded" value="https://ftxzpvrdyqnofxjmyeqd.supabase.co">
+            </div>
+
+            <div class="mt-4">
+                <label class="block text-sm font-medium mb-2">anon key:</label>
+                <textarea id="anonKey" rows="4" placeholder="Cole a anon key completa aqui..." 
+                          class="w-full p-2 border rounded font-mono text-xs"></textarea>
+            </div>
+
+            <div class="mt-4">
+                <label class="block text-sm font-medium mb-2">service_role key:</label>
+                <textarea id="serviceKey" rows="4" placeholder="Cole a service_role key completa aqui..." 
+                          class="w-full p-2 border rounded font-mono text-xs"></textarea>
+            </div>
+
+            <button onclick="validateKeys()" class="mt-4">🔍 Validar Chaves</button>
+            <button onclick="testConnection()" class="mt-4 copy">🚀 Testar Conexão</button>
+        </div>
+
+        <div id="validationResult" class="step" style="display: none;">
+            <h3>📊 Resultado da Validação</h3>
+            <div id="validationContent"></div>
+        </div>
+
+        <div id="testResult" class="step" style="display: none;">
+            <h3>🔗 Teste de Conexão</h3>
+            <div id="testContent"></div>
+        </div>
+
+        <div class="step">
+            <h3>📝 Passo 2: Gerar .env.local</h3>
+            <p>Depois de validar, copie as chaves corretas:</p>
+            
+            <div class="key-box">
+                <strong>REACT_APP_SUPABASE_URL=</strong><span id="finalUrl"></span>
+            </div>
+            
+            <div class="key-box">
+                <strong>REACT_APP_SUPABASE_ANON_KEY=</strong><span id="finalAnonKey"></span>
+            </div>
+            
+            <div class="key-box">
+                <strong>REACT_APP_SUPABASE_SERVICE_ROLE_KEY=</strong><span id="finalServiceKey"></span>
+            </div>
+
+            <button onclick="copyEnvFile()" class="copy">📋 Copiar .env.local</button>
+            <button onclick="downloadEnvFile()" class="copy">💾 Baixar .env.local</button>
+        </div>
+
+        <div class="step">
+            <h3>🔍 Como encontrar as chaves corretas</h3>
+            <ol>
+                <li><strong>Acesse:</strong> <a href="https://supabase.com" target="_blank">supabase.com</a></li>
+                <li><strong>Entre</strong> com sua conta</li>
+                <li><strong>Vá para:</strong> Project Settings → API</li>
+                <li><strong>Copie:</strong> Project URL e anon key</li>
+                <li><strong>Importante:</strong> Copie a chave COMPLETA (geralmente 200+ caracteres)</li>
+            </ol>
+            
+            <div class="test-warning">
+                <h4>⚠️ Sinais de chave incorreta:</h4>
+                <ul>
+                    <li>❌ Erro 401: "Invalid API key"</li>
+                    <li>❌ Chave muito curta (menos de 200 caracteres)</li>
+                    <li>❌ Chave truncada no meio</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function validateKeys() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const anonKey = document.getElementById('anonKey').value.trim();
+            const serviceKey = document.getElementById('serviceKey').value.trim();
+
+            const validationDiv = document.getElementById('validationResult');
+            const contentDiv = document.getElementById('validationContent');
+            
+            let validationHtml = '';
+            let hasErrors = false;
+
+            // Validar URL
+            if (!url || !url.includes('supabase.co')) {
+                validationHtml += '<div class="test-error">❌ URL inválida ou ausente</div>';
+                hasErrors = true;
+            } else {
+                validationHtml += '<div class="test-success">✅ URL válida: ' + url + '</div>';
+            }
+
+            // Validar anon key
+            if (!anonKey || anonKey.length < 200) {
+                validationHtml += '<div class="test-error">❌ Anon key muito curta ou ausente (' + anonKey.length + ' caracteres)</div>';
+                hasErrors = true;
+            } else if (!anonKey.startsWith('eyJ')) {
+                validationHtml += '<div class="test-error">❌ Anon key não parece ser um JWT válido</div>';
+                hasErrors = true;
+            } else {
+                validationHtml += '<div class="test-success">✅ Anon key válida (' + anonKey.length + ' caracteres)</div>';
+            }
+
+            // Validar service key
+            if (!serviceKey || serviceKey.length < 200) {
+                validationHtml += '<div class="test-error">❌ Service key muito curta ou ausente (' + serviceKey.length + ' caracteres)</div>';
+                hasErrors = true;
+            } else if (!serviceKey.startsWith('eyJ')) {
+                validationHtml += '<div class="test-error">❌ Service key não parece ser um JWT válido</div>';
+                hasErrors = true;
+            } else {
+                validationHtml += '<div class="test-success">✅ Service key válida (' + serviceKey.length + ' caracteres)</div>';
+            }
+
+            contentDiv.innerHTML = validationHtml;
+            validationDiv.style.display = 'block';
+
+            // Atualizar chaves finais se não houver erros
+            if (!hasErrors) {
+                document.getElementById('finalUrl').textContent = url;
+                document.getElementById('finalAnonKey').textContent = anonKey;
+                document.getElementById('finalServiceKey').textContent = serviceKey;
+            }
+        }
+
+        async function testConnection() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const anonKey = document.getElementById('anonKey').value.trim();
+
+            const testDiv = document.getElementById('testResult');
+            const contentDiv = document.getElementById('testContent');
+            
+            contentDiv.innerHTML = '<div class="test-warning">🔄 Testando conexão...</div>';
+            testDiv.style.display = 'block';
+
+            try {
+                const response = await fetch(url + '/rest/v1/formularios?select=count', {
+                    method: 'GET',
+                    headers: {
+                        'apikey': anonKey,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    contentDiv.innerHTML = '<div class="test-success">✅ Conexão bem-sucedida! API funcionando.</div>';
+                } else {
+                    const errorText = await response.text();
+                    contentDiv.innerHTML = '<div class="test-error">❌ Erro ' + response.status + ': ' + errorText + '</div>';
+                }
+            } catch (error) {
+                contentDiv.innerHTML = '<div class="test-error">❌ Erro de rede: ' + error.message + '</div>';
+            }
+        }
+
+        function copyEnvFile() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const anonKey = document.getElementById('anonKey').value.trim();
+            const serviceKey = document.getElementById('serviceKey').value.trim();
+
+            const envContent = `REACT_APP_SUPABASE_URL=${url}
+REACT_APP_SUPABASE_ANON_KEY=${anonKey}
+REACT_APP_SUPABASE_SERVICE_ROLE_KEY=${serviceKey}`;
+
+            navigator.clipboard.writeText(envContent);
+            
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = '✅ Copiado!';
+            setTimeout(() => {
+                btn.innerText = originalText;
+            }, 2000);
+        }
+
+        function downloadEnvFile() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const anonKey = document.getElementById('anonKey').value.trim();
+            const serviceKey = document.getElementById('serviceKey').value.trim();
+
+            const envContent = `REACT_APP_SUPABASE_URL=${url}
+REACT_APP_SUPABASE_ANON_KEY=${anonKey}
+REACT_APP_SUPABASE_SERVICE_ROLE_KEY=${serviceKey}`;
+
+            const blob = new Blob([envContent], { type: 'text/plain' });
+            const downloadUrl = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = '.env.local';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+        }
+
+        // Auto-preencher se houver dados na URL
+        window.addEventListener('load', () => {
+            // Pode adicionar lógica para preencher automaticamente se vier de parâmetros
+        });
+    </script>
+</body>
+</html>

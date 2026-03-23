@@ -1,45 +1,61 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { formularios, getRespostasByFormulario, toggleFormularioAtivo, deleteFormulario } from "@/lib/mockData";
+import { formularioService } from "@/services/supabase";
 import { Plus, Pencil, BarChart3, Copy, Trash2, Power, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { duplicateFormulario } from "@/lib/mockData";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function FormulariosListPageInner() {
-  const [, setRefresh] = useState(0);
+  const [formularios, setFormularios] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+
+  // Carregar formulários do Supabase
+  useEffect(() => {
+    const loadFormularios = async () => {
+      try {
+        const data = await formularioService.getAll();
+        setFormularios(data);
+      } catch (error) {
+        console.error('Erro ao carregar formulários:', error);
+        toast.error('Erro ao carregar formulários');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFormularios();
+  }, []);
 
   const handleCopyLink = (slug: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/f/${slug}`);
     toast.success("Link copiado!");
   };
 
-  const handleToggle = (id: number) => {
-    toggleFormularioAtivo(id);
-    setRefresh(n => n + 1);
-  };
-
-  const handleDelete = (id: number) => {
-    if (confirm("Tem certeza que deseja excluir este formulário? Todos os dados serão perdidos.")) {
-      deleteFormulario(id);
-      setRefresh(n => n + 1);
-      toast.success("Formulário excluído");
+  const handleToggle = async (id: string) => {
+    try {
+      await formularioService.toggleStatus(id);
+      setFormularios(prev => 
+        prev.map(f => f.id === id ? { ...f, ativo: !f.ativo } : f)
+      );
+      toast.success(`Formulário ${id ? 'ativado' : 'desativado'} com sucesso!`);
+    } catch (error) {
+      console.error('Erro ao alterar status:', error);
+      toast.error('Erro ao alterar status do formulário');
     }
   };
 
-  const handleDuplicateForm = (id: number) => {
-    const newForm = duplicateFormulario(id);
-    if (newForm) {
-      setRefresh(n => n + 1);
-      toast.success(`Formulário "${newForm.nome}" criado com sucesso!`);
-      // Navigate to the new form's constructor
-      setTimeout(() => {
-        navigate(`/admin/formularios/${newForm.id}/construtor`);
-      }, 1000);
-    } else {
-      toast.error("Erro ao duplicar formulário");
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este formulário?')) return;
+    
+    try {
+      await formularioService.delete(id);
+      setFormularios(prev => prev.filter(f => f.id !== id));
+      toast.success('Formulário excluído com sucesso!');
+    } catch (error) {
+      console.error('Erro ao excluir formulário:', error);
+      toast.error('Erro ao excluir formulário');
     }
   };
 
@@ -76,7 +92,7 @@ function FormulariosListPageInner() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {formularios.map(f => {
-            const totalRespostas = getRespostasByFormulario(f.id).length;
+            const totalRespostas = 0; // TODO: Implementar contagem de respostas
             return (
               <div key={f.id} className="rounded-xl border bg-card p-5 space-y-4">
                 <div>
@@ -104,7 +120,7 @@ function FormulariosListPageInner() {
                   <button onClick={() => navigate(`/admin/formularios/${f.id}/respostas`)} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs hover:bg-muted transition-colors flex-1 justify-center" title="Respostas">
                     <BarChart3 className="h-3.5 w-3.5" /> <span className="hidden xs:inline">Respostas</span>
                   </button>
-                  <button onClick={() => handleDuplicateForm(f.id)} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs hover:bg-muted transition-colors" title="Duplicar formulário">
+                  <button onClick={() => handleDuplicate(f.id)} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs hover:bg-muted transition-colors" title="Duplicar formulário">
                     <FileText className="h-3.5 w-3.5" />
                   </button>
                   <button onClick={() => handleCopyLink(f.slug)} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs hover:bg-muted transition-colors" title="Copiar link">

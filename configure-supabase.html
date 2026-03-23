@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurar Supabase - Formulários e Pesquisas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .step { background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .success { background: #10b981; color: white; }
+        .error { background: #ef4444; color: white; }
+        .url { background: #1f2937; color: white; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all; }
+        button { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        .help { background: #fef3c7; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 20px 0; }
+        code { background: #1f2937; padding: 2px 4px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Configurar Supabase</h1>
+        <p>Siga os passos abaixo para configurar sua conexão com o Supabase.</p>
+
+        <div class="step">
+            <h3>📋 Passo 1: Encontre suas credenciais</h3>
+            <ol>
+                <li>Acesse <a href="https://supabase.com" target="_blank">supabase.com</a></li>
+                <li>Faça login com sua conta</li>
+                <li>Vá para <strong>Project Settings</strong> > <strong>API</strong></li>
+                <li>Copie a <strong>Project URL</strong> e <strong>anon key</strong></li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>📝 Passo 2: Identifique a URL correta</h3>
+            <p>A URL do seu projeto segue este padrão:</p>
+            <div class="url">https://<strong>[PROJECT_ID]</strong>.supabase.co</div>
+            <p>Onde <strong>[PROJECT_ID]</strong> é o ID único do seu projeto.</p>
+            <p><strong>Exemplo:</strong> https://abcdefghijklmnopqrstuv.supabase.co</p>
+        </div>
+
+        <div class="step">
+            <h3>⚙️ Passo 3: Atualize seu .env.local</h3>
+            <p>Edite o arquivo <code>.env.local</code> na raiz do projeto:</p>
+            <div class="url">
+REACT_APP_SUPABASE_URL=https://[PROJECT_ID].supabase.co<br>
+REACT_APP_SUPABASE_ANON_KEY=[SUA_ANON_KEY]<br>
+REACT_APP_SUPABASE_SERVICE_ROLE_KEY=[SUA_SERVICE_KEY]
+            </div>
+            <p><strong>Importante:</strong> Substitua [PROJECT_ID], [SUA_ANON_KEY] e [SUA_SERVICE_KEY] pelos valores reais.</p>
+        </div>
+
+        <div class="step">
+            <h3>🚀 Passo 4: Teste a conexão</h3>
+            <p>Depois de configurar, acesse:</p>
+            <div class="url">http://localhost:8080/test-supabase</div>
+            <p>Deve aparecer <strong class="success">✅ Conectado ao Supabase!</strong></p>
+        </div>
+
+        <div class="help">
+            <h3>🔍 Como encontrar o Project ID</h3>
+            <p>Se não encontrar o Project ID no Dashboard:</p>
+            <ol>
+                <li>Verifique o URL do navegador ao acessar o Supabase</li>
+                <li>O Project ID está na URL após <strong>https://</strong> e antes de <strong>.supabase.co</strong></li>
+                <li>Exemplo: <code>https://abcd1234.supabase.co</code> → Project ID é <code>abcd1234</code></li>
+            </ol>
+        </div>
+
+        <div class="help">
+            <h3>🛠️ Solução de problemas comuns</h3>
+            <div class="step">
+                <h4>❌ Erro "Multiple GoTrueClient instances"</h4>
+                <p>Feche outras abas do navegador e recarregue a página.</p>
+            </div>
+            <div class="step">
+                <h4>❌ Erro "CORS policy"</h4>
+                <p>Configure as CORS policies no Supabase Dashboard.</p>
+            </div>
+            <div class="step">
+                <h4>❌ Erro "Connection refused"</h4>
+                <p>Verifique se o projeto Supabase está ativo.</p>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; text-align: center;">
+            <button onclick="window.close()">Fechar</button>
+        </div>
+    </div>
+
+    <script>
+        function highlightProjectId() {
+            const url = window.location.href;
+            const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+            if (match) {
+                const projectId = match[1];
+                document.body.innerHTML = document.body.innerHTML.replace(
+                    /\[PROJECT_ID\]/g, 
+                    `<span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 4px;">${projectId}</span>`
+                );
+            }
+        }
+
+        // Auto-destacar o Project ID se estiver na página
+        highlightProjectId();
+
+        // Copiar URL para clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text);
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = '✅ Copiado!';
+            setTimeout(() => {
+                btn.innerText = originalText;
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
