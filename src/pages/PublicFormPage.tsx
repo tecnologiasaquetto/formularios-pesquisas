@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { getFormularioBySlug, getPerguntasByFormulario, addResposta, addRespostaItem, addMatrizItem, type Pergunta } from "@/lib/mockData";
+import { getFormularioBySlug, getPerguntasByFormulario, type PerguntaMock } from "@/services/formularioServiceAdapter";
+import { addResposta, addRespostaItem, addMatrizItem, finalizarResposta } from "@/services/respostaServiceAdapter";
 import { ChevronLeft, ChevronRight, Send, CheckCircle2 } from "lucide-react";
 import QuestionRenderer from "@/components/perguntas/QuestionRenderer";
 import FormCover from "@/components/FormCover";
@@ -9,7 +10,31 @@ import { toast } from "sonner";
 
 export default function PublicFormPage() {
   const { slug } = useParams();
-  const formulario = getFormularioBySlug(slug || "");
+  const [formulario, setFormulario] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadFormulario = async () => {
+      if (!slug) return;
+      try {
+        const form = await getFormularioBySlug(slug);
+        setFormulario(form);
+      } catch (error) {
+        console.error('Erro ao carregar formulário:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadFormulario();
+  }, [slug]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p>Carregando...</p>
+      </div>
+    );
+  }
 
   if (!formulario) {
     return (
@@ -37,9 +62,10 @@ export default function PublicFormPage() {
   return <ActiveForm formulario={formulario} />;
 }
 
-function ActiveForm({ formulario }: { formulario: ReturnType<typeof getFormularioBySlug> }) {
+function ActiveForm({ formulario }: { formulario: any }) {
   const [showCover, setShowCover] = useState(formulario.mostrar_capa ?? true);
-  const perguntas = getPerguntasByFormulario(formulario!.id);
+  const [perguntas, setPerguntas] = useState<PerguntaMock[]>([]);
+  const [isLoadingPerguntas, setIsLoadingPerguntas] = useState(true);
   const [answers, setAnswers] = useState<Record<number, any>>({});
   const [matrizAnswers, setMatrizAnswers] = useState<Record<number, Record<string, number | 'NA'>>>({});
   const [currentStep, setCurrentStep] = useState(0);
@@ -47,9 +73,24 @@ function ActiveForm({ formulario }: { formulario: ReturnType<typeof getFormulari
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const loadPerguntas = async () => {
+      try {
+        const data = await getPerguntasByFormulario(formulario.id);
+        setPerguntas(data);
+      } catch (error) {
+        console.error('Erro ao carregar perguntas:', error);
+        toast.error('Erro ao carregar perguntas');
+      } finally {
+        setIsLoadingPerguntas(false);
+      }
+    };
+    loadPerguntas();
+  }, [formulario.id]);
+
   // Group perguntas into steps by secao
   const steps = useMemo(() => {
-    const groups: Pergunta[][] = [[]];
+    const groups: PerguntaMock[][] = [[]];
     for (const p of perguntas) {
       if (p.tipo === 'secao' && groups[groups.length - 1].length > 0) {
         groups.push([]);
@@ -65,7 +106,15 @@ function ActiveForm({ formulario }: { formulario: ReturnType<typeof getFormulari
 
   // Show cover if enabled
   if (showCover) {
-    return <FormCover formulario={formulario!} onStart={() => setShowCover(false)} />;
+    return <FormCover formulario={formulario} onStart={() => setShowCover(false)} />;
+  }
+
+  if (isLoadingPerguntas) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p>Carregando perguntas...</p>
+      </div>
+    );
   }
 
   const validate = () => {
@@ -101,75 +150,73 @@ function ActiveForm({ formulario }: { formulario: ReturnType<typeof getFormulari
   };
 
   const handleNext = () => {
-    if (!validate()) return;
-    if (isLastStep) {
-      handleSubmit();
-    } else {
-      setCurrentStep(s => s + 1);
-      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    if (!validate()) {
+      toast.error("Por favor, preencha todos os campos obrigatórios");
+      return;
     }
+    setErrors({});
+    setCurrentStep(prev => Math.min(prev + 1, totalSteps - 1));
   };
 
   const handlePrev = () => {
-    setCurrentStep(s => Math.max(0, s - 1));
-    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    setErrors({});
+    setCurrentStep(prev => Math.max(prev - 1, 0));
   };
 
   const handleSubmit = async () => {
+    if (!validate()) {
+      toast.error("Por favor, preencha todos os campos obrigatórios");
+      return;
+    }
+
     setSubmitting(true);
-    
     try {
-      // Criar nova resposta
-      const novaResposta = addResposta({
-        formulario_id: formulario!.id,
-        criado_em: new Date().toISOString(),
-        ip_hash: `hash_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Criar resposta
+      const resposta = await addResposta({
+        formulario_id: formulario.id,
+        ip_hash: 'web'
       });
 
-      // Salvar respostas simples
-      Object.entries(answers).forEach(([perguntaId, valor]) => {
-        addRespostaItem({
-          resposta_id: novaResposta.id,
-          pergunta_id: parseInt(perguntaId),
-          valor: String(valor)
+      // Salvar respostas normais
+      for (const [perguntaId, valor] of Object.entries(answers)) {
+        const pid = Number(perguntaId);
+        const pergunta = perguntas.find(p => p.id === pid);
+        if (!pergunta) continue;
+
+        let valorFinal = valor;
+        if (pergunta.tipo === 'checkbox' && Array.isArray(valor)) {
+          valorFinal = valor.join(', ');
+        }
+
+        await addRespostaItem({
+          resposta_id: resposta.id,
+          pergunta_id: pid,
+          valor: String(valorFinal)
         });
-      });
+      }
 
-      // Salvar respostas da matriz NPS
-      Object.entries(matrizAnswers).forEach(([perguntaId, matrizValue]) => {
-        const perguntaIdNum = parseInt(perguntaId);
-        
-        // Para cada linha da matriz
-        Object.entries(matrizValue).forEach(([linha, valor]) => {
-          if (valor === 'NA') {
-            addMatrizItem({
-              resposta_id: novaResposta.id,
-              pergunta_id: perguntaIdNum,
-              linha: linha,
-              nota: null,
-              is_na: true
-            });
-          } else if (typeof valor === 'number') {
-            addMatrizItem({
-              resposta_id: novaResposta.id,
-              pergunta_id: perguntaIdNum,
-              linha: linha,
-              nota: valor,
-              is_na: false
-            });
-          }
-        });
-      });
+      // Salvar respostas de matriz
+      for (const [perguntaId, linhas] of Object.entries(matrizAnswers)) {
+        const pid = Number(perguntaId);
+        for (const [linha, nota] of Object.entries(linhas)) {
+          await addMatrizItem({
+            resposta_id: resposta.id,
+            pergunta_id: pid,
+            linha,
+            nota: nota === 'NA' ? null : Number(nota),
+            is_na: nota === 'NA'
+          });
+        }
+      }
 
-      // Simular delay de rede
-      await new Promise(resolve => setTimeout(resolve, 1200));
-      
-      toast.success("Respostas enviadas com sucesso!");
+      // Finalizar resposta
+      await finalizarResposta(resposta.id);
+
       setSubmitted(true);
-      
+      toast.success("Resposta enviada com sucesso!");
     } catch (error) {
-      console.error("Erro ao salvar respostas:", error);
-      toast.error("Ocorreu um erro ao enviar suas respostas. Tente novamente.");
+      console.error('Erro ao enviar resposta:', error);
+      toast.error("Erro ao enviar resposta. Tente novamente.");
     } finally {
       setSubmitting(false);
     }
@@ -177,16 +224,17 @@ function ActiveForm({ formulario }: { formulario: ReturnType<typeof getFormulari
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <div className="flex-1 px-4 py-6 flex items-center justify-center">
-          <div className="text-center max-w-md animate-scale-in">
-            <div className="relative inline-block">
-              <CheckCircle2 className="h-16 w-16 text-success mx-auto mb-4 animate-scale-in" />
-              <div className="absolute inset-0 h-16 w-16 rounded-full bg-success/20 scale-150 animate-pulse" />
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="rounded-full bg-success/10 p-4">
+              <CheckCircle2 className="h-16 w-16 text-success" />
             </div>
-            <h1 className="text-xl font-bold mb-2 animate-slide-up">Obrigado!</h1>
-            <p className="text-muted-foreground animate-slide-up" style={{ animationDelay: '200ms' }}>
-              {formulario?.mensagem_fim || "Obrigado pela sua participação! Suas respostas foram registradas com sucesso."}
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold">Obrigado!</h1>
+            <p className="text-muted-foreground">
+              {formulario.mensagem_fim || "Suas respostas foram registradas com sucesso."}
             </p>
           </div>
         </div>
@@ -194,101 +242,94 @@ function ActiveForm({ formulario }: { formulario: ReturnType<typeof getFormulari
     );
   }
 
-  const progress = totalSteps > 1 ? ((currentStep + 1) / totalSteps) * 100 : 100;
-
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="bg-primary text-primary-foreground px-4 py-5">
-        <div className="max-w-[820px] mx-auto">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-foreground/20 text-primary-foreground font-bold text-sm">S</div>
-            <h1 className="text-lg font-bold">{formulario?.nome}</h1>
-          </div>
-          {formulario?.descricao && <p className="text-sm opacity-80 ml-11">{formulario.descricao}</p>}
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 py-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-10 text-center">
+          {formulario.logo_url && (
+            <img src={formulario.logo_url} alt="Logo" className="h-16 mx-auto mb-6" />
+          )}
+          <h1 className="text-3xl font-bold mb-3">{formulario.nome}</h1>
+          {formulario.descricao && (
+            <p className="text-muted-foreground text-lg">{formulario.descricao}</p>
+          )}
         </div>
-      </header>
 
-      {/* Progress bar */}
-      <div className="h-1 bg-muted">
-        <div className="h-full bg-primary transition-all duration-400" style={{ width: `${progress}%` }} />
-      </div>
+        {/* Progress */}
+        {totalSteps > 1 && (
+          <div className="mb-8 bg-card rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+              <span className="font-medium">Etapa {currentStep + 1} de {totalSteps}</span>
+              <span className="font-bold text-primary">{Math.round(((currentStep + 1) / totalSteps) * 100)}%</span>
+            </div>
+            <div className="h-3 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300 rounded-full"
+                style={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
 
-      {/* Content */}
-      <div className="flex-1 px-4 py-6">
-        <div className="max-w-[820px] mx-auto space-y-5">
-          <AnimatedStep direction="up" className="space-y-5">
-            {currentPerguntas.map((p, index) => (
-              <div 
-                key={p.id} 
-                className="animate-slide-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                {p.tipo === 'secao' ? (
-                  <div className="border-l-4 border-primary pl-4 py-2 mb-4 animate-fade-in">
-                    <h2 className="text-base font-bold">{p.texto}</h2>
-                    {p.config.descricao && <p className="text-sm text-muted-foreground mt-1">{p.config.descricao}</p>}
-                  </div>
-                ) : (
-                  <div className={`rounded-xl border bg-card p-5 transition-smooth ${errors[p.id] ? 'border-destructive animate-pulse' : ''}`}>
-                    <label className="block text-sm font-bold mb-3">
-                      {p.texto}
-                      {p.obrigatorio && <span className="text-destructive ml-1">*</span>}
-                    </label>
-                    <QuestionRenderer
-                      pergunta={p}
-                      value={p.tipo === 'matriz_nps' ? matrizAnswers[p.id] : answers[p.id]}
-                      error={errors[p.id]}
-                      onChange={(val) => {
-                        if (p.tipo === 'matriz_nps') {
-                          setMatrizAnswers(prev => ({ ...prev, [p.id]: val }));
-                        } else {
-                          setAnswers(prev => ({ ...prev, [p.id]: val }));
-                        }
-                      }}
-                    />
-                  </div>
-                )}
+        {/* Questions */}
+        <AnimatedStep key={currentStep}>
+          <div className="space-y-6">
+            {currentPerguntas.map(p => (
+              <div key={p.id} className="bg-card rounded-xl p-6 shadow-sm border border-border/50">
+                <QuestionRenderer
+                  pergunta={p}
+                  value={p.tipo === 'matriz_nps' ? matrizAnswers[p.id] : answers[p.id]}
+                  onChange={(val) => {
+                    if (p.tipo === 'matriz_nps') {
+                      setMatrizAnswers(prev => ({ ...prev, [p.id]: val }));
+                    } else {
+                      setAnswers(prev => ({ ...prev, [p.id]: val }));
+                    }
+                    setErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors[p.id];
+                      return newErrors;
+                    });
+                  }}
+                  error={errors[p.id]}
+                />
               </div>
             ))}
-          </AnimatedStep>
-        </div>
-      </div>
+          </div>
+        </AnimatedStep>
 
-      {/* Footer nav */}
-      <footer className="sticky bottom-0 border-t bg-card px-4 py-3 animate-slide-up">
-        <div className="max-w-[820px] mx-auto flex items-center justify-between">
+        {/* Navigation */}
+        <div className="flex items-center justify-between mt-10 bg-card rounded-xl p-6 shadow-sm">
           <button
             onClick={handlePrev}
-            className={`flex items-center gap-1.5 rounded-lg border px-4 py-2.5 text-sm hover:bg-muted transition-all duration-200 transform hover:scale-105 ${currentStep === 0 ? 'invisible' : ''}`}
+            disabled={currentStep === 0}
+            className="flex items-center gap-2 px-6 py-3 rounded-lg border-2 hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
           >
-            <ChevronLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" /> Voltar
+            <ChevronLeft className="h-5 w-5" />
+            Anterior
           </button>
-          <span className="text-xs text-muted-foreground animate-fade-in">
-            Passo {currentStep + 1} de {totalSteps}
-          </span>
-          <button
-            onClick={handleNext}
-            disabled={submitting}
-            className={`flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium text-primary-foreground transition-all duration-200 transform hover:scale-105 disabled:scale-100 disabled:opacity-50 ${isLastStep ? 'bg-success hover:bg-success/90' : 'bg-primary hover:bg-primary/90'} ${submitting ? 'animate-pulse' : ''}`}
-          >
-            {submitting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Enviando...
-              </>
-            ) : isLastStep ? (
-              <>
-                <Send className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" /> Enviar respostas
-              </>
-            ) : (
-              <>
-                Próximo <ChevronRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-              </>
-            )}
-          </button>
+
+          {isLastStep ? (
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex items-center gap-2 px-8 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all font-medium shadow-lg shadow-primary/20"
+            >
+              {submitting ? 'Enviando...' : 'Enviar Respostas'}
+              <Send className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              className="flex items-center gap-2 px-8 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all font-medium shadow-lg shadow-primary/20"
+            >
+              Próxima Etapa
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
         </div>
-      </footer>
+      </div>
     </div>
   );
 }

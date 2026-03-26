@@ -227,6 +227,7 @@ export const perguntaService = {
   },
 
   async update(id: string, perguntaData: Partial<Perguntas>) {
+    // TODO: Investigar erro 400 ao fazer UPDATE de perguntas
     const { data, error } = await supabase
       .from('perguntas')
       .update(perguntaData)

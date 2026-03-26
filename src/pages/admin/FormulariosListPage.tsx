@@ -59,6 +59,17 @@ function FormulariosListPageInner() {
     }
   };
 
+  const handleDuplicate = async (id: string) => {
+    try {
+      const newForm = await formularioService.duplicate(id);
+      setFormularios(prev => [newForm, ...prev]);
+      toast.success('Formulário duplicado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao duplicar formulário:', error);
+      toast.error('Erro ao duplicar formulário');
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

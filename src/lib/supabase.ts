@@ -1,48 +1,41 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Para desenvolvimento, use valores hardcoded ou window.ENV
-// Para produção, use Vite env variables
-const getEnvVar = (key: string) => {
-  // Primeiro tenta import.meta.env (Vite)
-  if (import.meta.env[key]) {
-    return import.meta.env[key];
-  }
-  // Fallback para window.ENV (se definido globalmente)
-  if (typeof window !== 'undefined' && (window as any).ENV?.[key]) {
-    return (window as any).ENV[key];
-  }
-  // Fallback para desenvolvimento
-  const defaults: Record<string, string> = {
-    REACT_APP_SUPABASE_URL: 'https://your-project-id.supabase.co',
-    REACT_APP_SUPABASE_ANON_KEY: 'default-key',
-    REACT_APP_SUPABASE_SERVICE_ROLE_KEY: 'default-service-key'
-  };
-  return defaults[key] || '';
-};
+// Configuração de variáveis de ambiente para Vite
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.REACT_APP_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.REACT_APP_SUPABASE_ANON_KEY || '';
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || import.meta.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || '';
 
-const supabaseUrl = getEnvVar('REACT_APP_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('REACT_APP_SUPABASE_ANON_KEY');
-const supabaseServiceRoleKey = getEnvVar('REACT_APP_SUPABASE_SERVICE_ROLE_KEY');
+// Supabase configurado
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('🚨 Supabase environment variables not found!');
-  console.error('📋 Please set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY');
-  console.error('📁 Create .env.local file with your credentials');
+  console.error('📋 URL:', supabaseUrl);
+  console.error('📋 Key:', supabaseAnonKey ? 'exists' : 'missing');
+  throw new Error('Supabase credentials missing');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Criar apenas UMA instância do cliente Supabase (singleton)
+// Usar uma variável global para garantir singleton mesmo com hot reload
+declare global {
+  var __supabase: ReturnType<typeof createClient> | undefined;
+}
 
-// Para operações server-side (admin)
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  supabaseServiceRoleKey,
-  {
+if (!globalThis.__supabase) {
+  globalThis.__supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
-      autoRefreshToken: false,
-      persistSession: false
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: 'sb-ftxzpvrdyqnofxjmyeqd-auth-token',
+      flowType: 'pkce'
     }
-  }
-);
+  });
+}
+
+export const supabase = globalThis.__supabase;
+
+// Para operações admin, usar o mesmo cliente (não criar nova instância)
+export const supabaseAdmin = supabase;
 
 // Helper para autenticação
 export const authHelpers = {

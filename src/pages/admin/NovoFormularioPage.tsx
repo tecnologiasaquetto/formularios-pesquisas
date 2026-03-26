@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addFormulario, formularios } from "@/lib/mockData";
+import { formularioService } from "@/services/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 function slugify(text: string) {
@@ -20,7 +21,9 @@ export default function NovoFormularioPage() {
   const [mensagemFim, setMensagemFim] = useState("");
   const [slugManual, setSlugManual] = useState(false);
   const [erro, setErro] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const handleNomeChange = (v: string) => {
     setNome(v);
@@ -32,20 +35,44 @@ export default function NovoFormularioPage() {
     setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ""));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!nome.trim()) { setErro("Nome é obrigatório"); return; }
     if (!slug.trim()) { setErro("Slug é obrigatório"); return; }
     if (!/^[a-z0-9-]+$/.test(slug)) { setErro("Slug inválido — use apenas letras, números e hífens"); return; }
-    if (formularios.some(f => f.slug === slug)) { setErro("Slug já existe"); return; }
 
-    const f = addFormulario({
-      nome: nome.trim(),
-      slug,
-      descricao: descricao.trim() || undefined,
-      mensagem_fim: mensagemFim.trim() || undefined
-    });
-    toast.success("Formulário criado!");
-    navigate(`/admin/formularios/${f.id}/construtor`);
+    setIsSubmitting(true);
+    setErro("");
+
+    try {
+      // Verificar se slug já existe
+      const formularios = await formularioService.getAll(true);
+      if (formularios.some(f => f.slug === slug)) {
+        setErro("Slug já existe");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const f = await formularioService.create({
+        nome: nome.trim(),
+        slug,
+        descricao: descricao.trim() || null,
+        mensagem_fim: mensagemFim.trim() || null,
+        ativo: true,
+        mostrar_capa: true,
+        cor_tema: '#3b82f6',
+        criado_por: user?.id ? String(user.id) : null,
+        data_inicio: null,
+        data_fim: null,
+        logo_url: null
+      });
+      
+      toast.success("Formulário criado!");
+      navigate(`/admin/formularios/${f.id}/construtor`);
+    } catch (error) {
+      console.error('Erro ao criar formulário:', error);
+      toast.error('Erro ao criar formulário');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -105,9 +132,10 @@ export default function NovoFormularioPage() {
 
         <button
           onClick={handleSubmit}
-          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+          disabled={isSubmitting}
+          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Criar formulário
+          {isSubmitting ? 'Criando...' : 'Criar formulário'}
         </button>
       </div>
     </div>
