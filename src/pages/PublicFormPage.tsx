@@ -1,26 +1,35 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { getFormularioBySlug, getPerguntasByFormulario, type PerguntaMock } from "@/services/formularioServiceAdapter";
-import { addResposta, addRespostaItem, addMatrizItem, finalizarResposta } from "@/services/respostaServiceAdapter";
+import { supabasePublic } from "@/lib/supabase";
 import { ChevronLeft, ChevronRight, Send, CheckCircle2 } from "lucide-react";
 import QuestionRenderer from "@/components/perguntas/QuestionRenderer";
 import FormCover from "@/components/FormCover";
 import AnimatedStep from "@/components/AnimatedStep";
 import { toast } from "sonner";
+import { supabasePerguntaToMock, numberToUuid, type PerguntaMock } from "@/lib/supabaseAdapters";
 
 export default function PublicFormPage() {
   const { slug } = useParams();
   const [formulario, setFormulario] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
 
   useEffect(() => {
     const loadFormulario = async () => {
       if (!slug) return;
       try {
-        const form = await getFormularioBySlug(slug);
+        const { data: form, error } = await supabasePublic
+          .from('formularios')
+          .select('*')
+          .eq('slug', slug)
+          .eq('ativo', true)
+          .single();
+
+        if (error) throw error;
         setFormulario(form);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro ao carregar formulário:', error);
+        setErrorDetails(error?.message || JSON.stringify(error) || "Erro desconhecido");
       } finally {
         setIsLoading(false);
       }
@@ -39,9 +48,15 @@ export default function PublicFormPage() {
   if (!formulario) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
+        <div className="text-center max-w-md px-4">
           <h1 className="text-2xl font-bold mb-2">404</h1>
-          <p className="text-muted-foreground">Formulário não encontrado.</p>
+          <p className="text-muted-foreground mb-4">Formulário não encontrado.</p>
+          {errorDetails && (
+            <div className="bg-destructive/10 text-destructive text-sm p-3 rounded text-left overflow-auto">
+              <strong>Detalhes do erro:</strong><br />
+              {errorDetails}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -72,12 +87,31 @@ function ActiveForm({ formulario }: { formulario: any }) {
   const [errors, setErrors] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+
+  useEffect(() => {
+    // Check if this form was already submitted by this browser
+    if (formulario?.id) {
+      const storageKey = `form_submitted_${formulario.id}`;
+      if (localStorage.getItem(storageKey)) {
+        setAlreadySubmitted(true);
+      }
+    }
+  }, [formulario?.id]);
 
   useEffect(() => {
     const loadPerguntas = async () => {
       try {
-        const data = await getPerguntasByFormulario(formulario.id);
-        setPerguntas(data);
+        const { data, error } = await supabasePublic
+          .from('perguntas')
+          .select('*')
+          .eq('formulario_id', formulario.id);
+
+        if (error) throw error;
+
+        const mapped = (data || []).map(p => supabasePerguntaToMock(p))
+                          .sort((a, b) => a.ordem - b.ordem);
+        setPerguntas(mapped);
       } catch (error) {
         console.error('Erro ao carregar perguntas:', error);
         toast.error('Erro ao carregar perguntas');
@@ -85,7 +119,9 @@ function ActiveForm({ formulario }: { formulario: any }) {
         setIsLoadingPerguntas(false);
       }
     };
-    loadPerguntas();
+    if (formulario?.id && formulario?.id !== undefined) {
+      loadPerguntas();
+    }
   }, [formulario.id]);
 
   // Group perguntas into steps by secao
@@ -156,11 +192,13 @@ function ActiveForm({ formulario }: { formulario: any }) {
     }
     setErrors({});
     setCurrentStep(prev => Math.min(prev + 1, totalSteps - 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrev = () => {
     setErrors({});
     setCurrentStep(prev => Math.max(prev - 1, 0));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async () => {
@@ -172,10 +210,24 @@ function ActiveForm({ formulario }: { formulario: any }) {
     setSubmitting(true);
     try {
       // Criar resposta
-      const resposta = await addResposta({
-        formulario_id: formulario.id,
-        ip_hash: 'web'
-      });
+      const { data: resposta, error: respostaError } = await supabasePublic
+        .from('respostas')
+        .insert({
+          formulario_id: formulario.id,
+          respondente_nome: null,
+          respondente_email: null,
+          respondente_departamento: null,
+          ip_address: null,
+          user_agent: null,
+          finalizado: false
+        })
+        .select()
+        .single();
+      
+      if (respostaError) throw respostaError;
+
+      // Usar transação (via loop para simplicidade, um helper de insert array seria ideal)
+      const respostaItensToInsert = [];
 
       // Salvar respostas normais
       for (const [perguntaId, valor] of Object.entries(answers)) {
@@ -183,34 +235,59 @@ function ActiveForm({ formulario }: { formulario: any }) {
         const pergunta = perguntas.find(p => p.id === pid);
         if (!pergunta) continue;
 
+        const perguntaUuid = numberToUuid(pid);
+        if (!perguntaUuid) continue;
+
         let valorFinal = valor;
         if (pergunta.tipo === 'checkbox' && Array.isArray(valor)) {
           valorFinal = valor.join(', ');
         }
 
-        await addRespostaItem({
+        respostaItensToInsert.push({
           resposta_id: resposta.id,
-          pergunta_id: pid,
-          valor: String(valorFinal)
+          pergunta_id: perguntaUuid,
+          matriz_item_id: null,
+          valor: String(valorFinal),
+          arquivo_url: null
         });
       }
 
       // Salvar respostas de matriz
       for (const [perguntaId, linhas] of Object.entries(matrizAnswers)) {
         const pid = Number(perguntaId);
+        const perguntaUuid = numberToUuid(pid);
+        if (!perguntaUuid) continue;
+
         for (const [linha, nota] of Object.entries(linhas)) {
-          await addMatrizItem({
+          respostaItensToInsert.push({
             resposta_id: resposta.id,
-            pergunta_id: pid,
-            linha,
-            nota: nota === 'NA' ? null : Number(nota),
-            is_na: nota === 'NA'
+            pergunta_id: perguntaUuid,
+            matriz_item_id: null,
+            valor: JSON.stringify({
+              linha,
+              nota: nota === 'NA' ? null : Number(nota),
+              is_na: nota === 'NA'
+            }),
+            arquivo_url: null
           });
         }
       }
 
+      if (respostaItensToInsert.length > 0) {
+        const { error: itemsError } = await supabasePublic.from('resposta_itens').insert(respostaItensToInsert);
+        if (itemsError) throw itemsError;
+      }
+
       // Finalizar resposta
-      await finalizarResposta(resposta.id);
+      const { error: finalizeError } = await supabasePublic
+        .from('respostas')
+        .update({ finalizado: true })
+        .eq('id', resposta.id);
+        
+      if (finalizeError) throw finalizeError;
+
+      // Mark as submitted in localStorage to prevent duplicates
+      localStorage.setItem(`form_submitted_${formulario.id}`, 'true');
 
       setSubmitted(true);
       toast.success("Resposta enviada com sucesso!");
@@ -222,7 +299,7 @@ function ActiveForm({ formulario }: { formulario: any }) {
     }
   };
 
-  if (submitted) {
+  if (submitted || alreadySubmitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="max-w-md w-full text-center space-y-6">
@@ -232,9 +309,12 @@ function ActiveForm({ formulario }: { formulario: any }) {
             </div>
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold">Obrigado!</h1>
+            <h1 className="text-2xl font-bold">{alreadySubmitted ? "Você já participou" : "Obrigado!"}</h1>
             <p className="text-muted-foreground">
-              {formulario.mensagem_fim || "Suas respostas foram registradas com sucesso."}
+              {alreadySubmitted 
+                ? "Identificamos que você já enviou suas respostas para este formulário. Agradecemos sua participação!" 
+                : (formulario.mensagem_fim || "Suas respostas foram registradas com sucesso.")
+              }
             </p>
           </div>
         </div>
@@ -274,28 +354,58 @@ function ActiveForm({ formulario }: { formulario: any }) {
 
         {/* Questions */}
         <AnimatedStep key={currentStep}>
-          <div className="space-y-6">
-            {currentPerguntas.map(p => (
-              <div key={p.id} className="bg-card rounded-xl p-6 shadow-sm border border-border/50">
-                <QuestionRenderer
-                  pergunta={p}
-                  value={p.tipo === 'matriz_nps' ? matrizAnswers[p.id] : answers[p.id]}
-                  onChange={(val) => {
-                    if (p.tipo === 'matriz_nps') {
-                      setMatrizAnswers(prev => ({ ...prev, [p.id]: val }));
-                    } else {
-                      setAnswers(prev => ({ ...prev, [p.id]: val }));
-                    }
-                    setErrors(prev => {
-                      const newErrors = { ...prev };
-                      delete newErrors[p.id];
-                      return newErrors;
-                    });
-                  }}
-                  error={errors[p.id]}
-                />
-              </div>
-            ))}
+          <div className="space-y-8">
+            {currentPerguntas.map(p => {
+              if (p.tipo === 'secao') {
+                return (
+                  <div key={p.id} className="pt-4">
+                    <h2 className="text-xl font-bold text-foreground border-b-2 border-primary/30 pb-3">{p.texto}</h2>
+                    {p.config?.descricao && (
+                      <p className="text-muted-foreground text-sm mt-2">{p.config.descricao}</p>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={p.id}
+                  className={`bg-card rounded-xl shadow-sm border border-border/50 overflow-hidden ${p.tipo === 'matriz_nps' ? 'p-0' : 'p-6'}`}
+                >
+                  {/* Question title */}
+                  <div className={`${p.tipo === 'matriz_nps' ? 'px-6 pt-6 pb-4 border-b border-border/50 bg-muted/30' : 'mb-4'}`}>
+                    <p className="font-semibold text-base text-foreground">
+                      {p.texto}
+                      {p.obrigatorio && <span className="text-destructive ml-1">*</span>}
+                    </p>
+                    {p.config?.descricao && (
+                      <p className="text-muted-foreground text-sm mt-1">{p.config.descricao}</p>
+                    )}
+                  </div>
+
+                  {/* Question body */}
+                  <div className={p.tipo === 'matriz_nps' ? 'px-6 pb-6 pt-2' : ''}>
+                    <QuestionRenderer
+                      pergunta={p}
+                      value={p.tipo === 'matriz_nps' ? matrizAnswers[p.id] : answers[p.id]}
+                      onChange={(val) => {
+                        if (p.tipo === 'matriz_nps') {
+                          setMatrizAnswers(prev => ({ ...prev, [p.id]: val }));
+                        } else {
+                          setAnswers(prev => ({ ...prev, [p.id]: val }));
+                        }
+                        setErrors(prev => {
+                          const newErrors = { ...prev };
+                          delete newErrors[p.id];
+                          return newErrors;
+                        });
+                      }}
+                      error={errors[p.id]}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </AnimatedStep>
 

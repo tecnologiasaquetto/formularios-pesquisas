@@ -12,10 +12,11 @@ import {
   type PerguntaMock
 } from "@/services/formularioServiceAdapter";
 import { formularioService } from "@/services/supabase";
+import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { numberToUuid, supabaseFormularioToMock } from "@/lib/supabaseAdapters";
 import {
   Grid3X3, Gauge, CircleDot, CheckSquare, SlidersHorizontal,
-  AlignLeft, Type, Bookmark, GripVertical, Trash2, Copy, Eye, Settings, Save
+  AlignLeft, Type, Bookmark, GripVertical, Trash2, Copy, Eye, Settings, Save, ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 import FormularioPreviewModal from "@/components/FormularioPreviewModal";
@@ -35,6 +36,7 @@ const TIPOS = [
 export default function ConstrutorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { setItemName, resetItemName } = useBreadcrumb();
   const [formulario, setFormulario] = useState<any>(null);
   const [perguntas, setPerguntas] = useState<PerguntaMock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,6 +55,10 @@ export default function ConstrutorPage() {
         const mockForm = supabaseFormularioToMock(formData);
         setFormulario(mockForm);
         
+        if (formData?.nome) {
+          setItemName(formData.nome);
+        }
+        
         const perguntasData = await getPerguntasByFormulario(mockForm.id);
         setPerguntas(perguntasData);
       } catch (error) {
@@ -63,6 +69,7 @@ export default function ConstrutorPage() {
       }
     };
     loadData();
+    return () => resetItemName();
   }, [id]);
 
   if (isLoading) {
@@ -76,9 +83,13 @@ export default function ConstrutorPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      toast.success("Formulário salvo com sucesso!");
+      // Re-carregar dados para garantir que o estado local está em sincronia com o banco
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const perguntasData = await getPerguntasByFormulario(formulario.id);
+      setPerguntas(perguntasData);
+      toast.success("Todos os dados foram sincronizados e salvos!");
     } catch (error) {
+      console.error('Erro ao sincronizar dados:', error);
       toast.error("Erro ao salvar formulário");
     } finally {
       setIsSaving(false);
@@ -133,14 +144,10 @@ export default function ConstrutorPage() {
   };
 
   const handleBlurTexto = async (pid: number, texto: string) => {
-    // TODO: Corrigir erro 400 ao salvar texto da pergunta
-    // Problema: adapter está enviando campos incorretos para o Supabase
-    // Por enquanto, apenas atualiza localmente
-    
     // Salvar no banco apenas quando perder o foco
     try {
-      // await updatePergunta(pid, { texto });
-      console.log('TODO: Salvar texto da pergunta no banco');
+      console.log(`[Construtor] Atualizando texto da pergunta ${pid}: ${texto}`);
+      await updatePergunta(pid, { texto });
     } catch (error) {
       console.error("Erro ao atualizar texto:", error);
       toast.error("Erro ao salvar alteração");
@@ -230,6 +237,15 @@ export default function ConstrutorPage() {
             <Eye className="h-4 w-4" />
             <span className="hidden sm:inline">Pré-visualizar</span>
           </button>
+          <a
+            href={`/f/${formulario.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted transition-colors"
+          >
+            <ExternalLink className="h-4 w-4" />
+            <span className="hidden sm:inline">Ver Online</span>
+          </a>
           <button
             onClick={handleSave}
             disabled={isSaving}
@@ -373,6 +389,14 @@ export default function ConstrutorPage() {
           )}
         </div>
       </div>
+      {/* Modals */}
+      {showPreview && (
+        <FormularioPreviewModal
+          formulario={formulario}
+          perguntas={perguntas}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }

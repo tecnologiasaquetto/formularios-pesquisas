@@ -1,17 +1,16 @@
-import { getPerguntasByFormulario, formularios } from "@/lib/mockData";
+import { type PerguntaMock } from "@/services/formularioServiceAdapter";
 import QuestionRenderer from "@/components/perguntas/QuestionRenderer";
 import FormCoverPreview from "@/components/FormCoverPreview";
 import { useState } from "react";
 
 interface LivePreviewProps {
-  formularioId: number;
+  formulario: any;
+  perguntas: PerguntaMock[];
   showCover?: boolean;
   className?: string;
 }
 
-export default function LivePreview({ formularioId, showCover = true, className = "" }: LivePreviewProps) {
-  const perguntas = getPerguntasByFormulario(formularioId);
-  const formulario = formularios.find(f => f.id === formularioId);
+export default function LivePreview({ formulario, perguntas, showCover = true, className = "" }: LivePreviewProps) {
   const [showCoverState, setShowCoverState] = useState(showCover);
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<number, any>>({});
@@ -39,7 +38,7 @@ export default function LivePreview({ formularioId, showCover = true, className 
         </div>
         <FormCoverPreview 
           formulario={formulario || { 
-            id: formularioId, 
+            id: formulario?.id || 0, 
             nome: "Formulário de Exemplo", 
             slug: "preview", 
             ativo: true,

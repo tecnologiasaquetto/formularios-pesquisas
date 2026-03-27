@@ -1,4 +1,4 @@
-import { type Pergunta } from "@/lib/mockData";
+import { type PerguntaMock } from "@/services/formularioServiceAdapter";
 import MatrizNps from "./MatrizNps";
 import NpsSimples from "./NpsSimples";
 import RadioQuestion from "./RadioQuestion";
@@ -8,7 +8,7 @@ import TextoLongo from "./TextoLongo";
 import TextoCurto from "./TextoCurto";
 
 interface Props {
-  pergunta: Pergunta;
+  pergunta: PerguntaMock;
   value: any;
   onChange: (val: any) => void;
   error?: string;

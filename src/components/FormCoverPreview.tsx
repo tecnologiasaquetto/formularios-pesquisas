@@ -4,10 +4,9 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, Clock, ChevronRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { type Formulario } from "@/lib/mockData";
 
 interface FormCoverPreviewProps {
-  formulario: Formulario;
+  formulario: any;
   onStart: () => void;
 }
 

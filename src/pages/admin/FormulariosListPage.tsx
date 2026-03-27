@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { formularioService } from "@/services/supabase";
+import { formularioService, statsService } from "@/services/supabase";
 import { Plus, Pencil, BarChart3, Copy, Trash2, Power, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +16,19 @@ function FormulariosListPageInner() {
     const loadFormularios = async () => {
       try {
         const data = await formularioService.getAll();
-        setFormularios(data);
+        
+        // Carregar contagem de respostas para cada formulário
+        const formsWithStats = await Promise.all(data.map(async (f) => {
+          try {
+            const stats = await statsService.getFormStats(f.id);
+            return { ...f, totalRespostas: stats.totalRespostas };
+          } catch (err) {
+            console.error(`Erro ao carregar stats para ${f.id}:`, err);
+            return { ...f, totalRespostas: 0 };
+          }
+        }));
+        
+        setFormularios(formsWithStats);
       } catch (error) {
         console.error('Erro ao carregar formulários:', error);
         toast.error('Erro ao carregar formulários');
@@ -29,8 +41,44 @@ function FormulariosListPageInner() {
   }, []);
 
   const handleCopyLink = (slug: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/f/${slug}`);
-    toast.success("Link copiado!");
+    const url = `${window.location.origin}/f/${slug}`;
+    
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(() => {
+        toast.success("Link copiado!");
+      }).catch(() => {
+        fallbackCopyTextToClipboard(url);
+      });
+    } else {
+      fallbackCopyTextToClipboard(url);
+    }
+  };
+
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Ensure the textarea is not visible or affecting layout
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        toast.success("Link copiado!");
+      } else {
+        toast.error("Não foi possível copiar o link automaticamente");
+      }
+    } catch (err) {
+      console.error('Falha ao copiar:', err);
+      toast.error("Erro ao copiar o link");
+    }
+
+    document.body.removeChild(textArea);
   };
 
   const handleToggle = async (id: string) => {
@@ -103,7 +151,7 @@ function FormulariosListPageInner() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {formularios.map(f => {
-            const totalRespostas = 0; // TODO: Implementar contagem de respostas
+            const totalRespostas = f.totalRespostas || 0;
             return (
               <div key={f.id} className="rounded-xl border bg-card p-5 space-y-4">
                 <div>

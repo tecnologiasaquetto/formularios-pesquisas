@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import AdminLayout from "./components/AdminLayout";
+import { BreadcrumbProvider } from "@/contexts/BreadcrumbContext";
 import FormulariosListPage from "./pages/admin/FormulariosListPage";
 import NovoFormularioPage from "./pages/admin/NovoFormularioPage";
 import ConstrutorPage from "./pages/admin/ConstrutorPage";
@@ -22,7 +23,7 @@ import TestCorsFix from "./test-cors-fix";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Sonner />
@@ -39,7 +40,9 @@ const App = () => (
               {/* Protected admin routes */}
               <Route path="/admin" element={
                 <ProtectedRoute>
-                  <AdminLayout />
+                  <BreadcrumbProvider>
+                    <AdminLayout />
+                  </BreadcrumbProvider>
                 </ProtectedRoute>
               }>
                 <Route index element={<Navigate to="/admin/formularios" replace />} />

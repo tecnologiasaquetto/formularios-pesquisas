@@ -1,21 +1,20 @@
 import { useState, useMemo } from "react";
-import { getPerguntasByFormulario, formularios, type Pergunta } from "@/lib/mockData";
+import { type PerguntaMock } from "@/services/formularioServiceAdapter";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import QuestionRenderer from "./perguntas/QuestionRenderer";
 
 interface Props {
-  formularioId: number;
+  formulario: any;
+  perguntas: PerguntaMock[];
   onClose: () => void;
 }
 
-export default function FormularioPreviewModal({ formularioId, onClose }: Props) {
-  const formulario = formularios.find(f => f.id === formularioId);
-  const perguntas = getPerguntasByFormulario(formularioId);
+export default function FormularioPreviewModal({ formulario, perguntas, onClose }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<number, any>>({});
 
   const steps = useMemo(() => {
-    const groups: Pergunta[][] = [[]];
+    const groups: PerguntaMock[][] = [[]];
     for (const p of perguntas) {
       if (p.tipo === 'secao' && groups[groups.length - 1].length > 0) {
         groups.push([]);

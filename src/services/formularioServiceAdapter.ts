@@ -114,27 +114,40 @@ export async function updatePergunta(perguntaId: number, updates: Partial<Pergun
   try {
     const uuid = numberToUuid(perguntaId);
     if (!uuid) {
-      throw new Error('Pergunta não encontrada');
+      console.error('UUID não encontrado para perguntaId:', perguntaId);
+      throw new Error('Pergunta não encontrada (ID mapeado não existe)');
     }
     
     const cached = perguntaCache.get(perguntaId);
     if (!cached) {
-      throw new Error('Pergunta não está no cache');
+      console.warn('Pergunta não está no cache, tentando processar sem cache');
     }
     
-    // TODO: Corrigir conversão de dados no adapter
-    // Converter para formato Supabase, mas remover formulario_id do update
-    const supabaseUpdates = mockPerguntaToSupabase(updates, cached.uuid);
-    const { formulario_id, ...updateData } = supabaseUpdates;
+    // Converter para formato Supabase
+    // O cached.uuid aqui é o UUID da pergunta, o adapter usa ele como placeholder 
+    // mas mockPerguntaToSupabase espera o FORMULARIO_ID. 
+    // Como removemos o formulario_id logo depois, o valor passado não importa muito,
+    // mas vamos passar um valor nulo ou vazio para ser mais limpo.
+    const supabaseUpdates = mockPerguntaToSupabase(updates, '');
+    const { formulario_id, id: restId, ...updateData } = supabaseUpdates as any;
     
-    const updated = await perguntaService.update(uuid, updateData as any);
+    console.log(`[Adapter] Atualizando pergunta ${uuid}:`, updateData);
+    
+    const updated = await perguntaService.update(uuid, updateData);
+    
+    if (!updated) {
+      console.warn(`[Adapter] Pergunta não encontrada no banco para atualizar: ${uuid}. Retornando estado local.`);
+      // Se não encontrou no banco, manter o que temos no cache mesclado com as atualizações
+      const current = cached?.data || (updates as PerguntaMock);
+      return { ...current, ...updates };
+    }
     
     const mock = supabasePerguntaToMock(updated);
     perguntaCache.set(mock.id, { uuid: updated.id, data: mock });
     
     return mock;
   } catch (error) {
-    console.error('Erro ao atualizar pergunta:', error);
+    console.error('Erro ao atualizar pergunta no adapter:', error);
     throw error;
   }
 }

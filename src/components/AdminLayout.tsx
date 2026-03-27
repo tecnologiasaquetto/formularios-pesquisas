@@ -12,12 +12,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { ROLE_LABELS, ROLE_COLORS } from "@/types/auth";
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { itemName } = useBreadcrumb();
 
   useEffect(() => {
     if (!user) {
@@ -43,7 +45,10 @@ export default function AdminLayout() {
       breadcrumbs.push({ label: "Novo", path: "/admin/formularios/novo" });
     } else if (pathParts[idIndex]) {
       const id = pathParts[idIndex];
-      breadcrumbs.push({ label: `#${id}`, path: `/admin/formularios/${id}/construtor` });
+      // Use itemName if available, otherwise use #ID
+      const displayLabel = itemName || `#${id.slice(0, 8)}...`;
+      breadcrumbs.push({ label: displayLabel, path: `/admin/formularios/${id}/respostas` });
+      
       if (pathParts.includes("construtor")) breadcrumbs.push({ label: "Construtor", path: location.pathname });
       if (pathParts.includes("respostas")) breadcrumbs.push({ label: "Respostas", path: location.pathname });
       if (pathParts.includes("configuracoes")) breadcrumbs.push({ label: "Configurações", path: location.pathname });

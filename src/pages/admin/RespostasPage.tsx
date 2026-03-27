@@ -1,218 +1,1423 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import {
-  formularios, getPerguntasByFormulario, getRespostasByFormulario,
-  respostaItens, matrizItens, calcNpsStats, calcMatrizMedias
-} from "@/lib/mockData";
-import { RefreshCw, Download, ExternalLink } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { formularioService, perguntaService, respostaService, statsService, type MatrizStatItem } from "@/services/supabase";
+import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
+import { RefreshCw, Download, ExternalLink, Eye, Info, Search, Calendar, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, RadialBarChart, RadialBar, Legend
+} from "recharts";
+
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 export default function RespostasPage() {
-  const { id } = useParams();
-  const formularioId = Number(id);
-  const formulario = formularios.find(f => f.id === formularioId);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos'>('dashboard');
+  const { id } = useParams<{ id: string }>();
+  const { setItemName, resetItemName } = useBreadcrumb();
+
+  const [formulario, setFormulario] = useState<any>(null);
+  const [perguntas, setPerguntas] = useState<any[]>([]);
+  const [matrizItens, setMatrizItens] = useState<any[]>([]);
+  const [respostas, setRespostas] = useState<any[]>([]);
+  const [respostaItens, setRespostaItens] = useState<any[]>([]);
+  const [npsStats, setNpsStats] = useState<any>(null);
+  const [matrizMedias, setMatrizMedias] = useState<Record<string, MatrizStatItem[]>>({});
+
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos' | 'parecer' | 'calculos'>('dashboard');
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedResponse, setSelectedResponse] = useState<any>(null);
 
-  useEffect(() => {
-    setTimeout(() => setIsLoading(false), 800);
-  }, []);
+  // Filters for Respostas tab
+  const [searchText, setSearchText] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortField, setSortField] = useState<'criado_em' | 'respondente_nome'>('criado_em');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  if (!formulario) return <p className="text-destructive">Formulário não encontrado.</p>;
+  const loadData = async () => {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const [formData, perguntasData, respostasData, npsData, matrizData] = await Promise.all([
+        formularioService.getById(id),
+        perguntaService.getByFormulario(id),
+        respostaService.getByFormulario(id),
+        statsService.getNpsStats(id).catch(() => null),
+        statsService.getMatrizStats(id).catch(() => ({}))
+      ]);
 
-  if (isLoading) {
-    return <p className="text-destructive">Carregando...</p>;
-  }
+      setFormulario(formData);
+      setPerguntas(perguntasData);
+      setRespostas(respostasData);
+      setNpsStats(npsData);
+      setMatrizMedias(matrizData as Record<string, MatrizStatItem[]>);
+      
+      if (formData?.nome) {
+        setItemName(formData.nome);
+      }
 
-  const perguntas = getPerguntasByFormulario(formularioId);
-  const respostas = getRespostasByFormulario(formularioId);
-  const npsStats = calcNpsStats(formularioId);
-  const matrizMedias = calcMatrizMedias(formularioId);
-  const hasMatriz = perguntas.some(p => p.tipo === 'matriz_nps');
+      if (perguntasData.length > 0) {
+        const { data: mItens } = await supabase
+          .from('matriz_itens')
+          .select('*')
+          .in('pergunta_id', perguntasData.filter(p => p.tipo === 'matriz_nps').map(p => p.id));
+        setMatrizItens(mItens || []);
+      }
 
-  const handleExportCSV = () => {
-    toast.success("CSV exportado! (protótipo)");
+      if (respostasData.length > 0) {
+        const { data: items } = await supabase
+          .from('resposta_itens')
+          .select('*')
+          .in('resposta_id', respostasData.map(r => r.id));
+        setRespostaItens(items || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao carregar dados do formulário');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const npsColor = (score: number) => score >= 50 ? 'text-success' : score >= 0 ? 'text-warning' : 'text-destructive';
+  useEffect(() => { 
+    loadData(); 
+    return () => resetItemName();
+  }, [id]);
 
-  // Stats per pergunta
-  const getPerguntaStats = (perguntaId: number) => {
+  // ─── Computed stats ──────────────────────────────────────────────────────────
+
+  const hasMatriz = perguntas.some(p => p.tipo === 'matriz_nps');
+  const matrizPerguntas = perguntas.filter(p => p.tipo === 'matriz_nps');
+  const hasMatrizData = Object.keys(matrizMedias).length > 0;
+
+  const npsColor = (score: number) =>
+    score >= 75 ? 'text-emerald-600' : 
+    score >= 50 ? 'text-emerald-500' : 
+    score >= 0 ? 'text-amber-500' : 
+    'text-destructive';
+
+  const npsLabel = (score: number) =>
+    score >= 75 ? 'Excelência' : 
+    score >= 50 ? 'Qualidade' : 
+    score >= 0 ? 'Aperfeiçoamento' : 
+    'Zona Crítica';
+
+  // Trend: group responses by day
+  const trendData = useMemo(() => {
+    const byDay: Record<string, number> = {};
+    respostas.forEach(r => {
+      const day = new Date(r.criado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      byDay[day] = (byDay[day] || 0) + 1;
+    });
+    return Object.entries(byDay)
+      .map(([date, count]) => ({ date, count }))
+      .slice(-14); // last 14 days
+  }, [respostas]);
+
+  // Stats per pergunta (handles both regular and matrix)
+  const getPerguntaStats = (perguntaId: string) => {
     const items = respostaItens.filter(ri => ri.pergunta_id === perguntaId);
     const counts: Record<string, number> = {};
-    items.forEach(i => { counts[i.valor] = (counts[i.valor] || 0) + 1; });
-    return { counts, total: items.length };
+    let totalScoreCount = 0;
+    let promotores = 0;
+    let passivos = 0;
+    let detratores = 0;
+    let naCount = 0;
+
+    items.forEach(item => {
+      if (!item.valor) return;
+      
+      let val = String(item.valor);
+      let nota: number | null = null;
+
+      try {
+        const parsed = JSON.parse(item.valor);
+        if (parsed && typeof parsed === 'object' && 'linha' in parsed) {
+          if (parsed.is_na) {
+            naCount++;
+            return;
+          }
+          val = String(parsed.nota);
+          nota = Number(parsed.nota);
+        }
+      } catch {
+        if (!isNaN(Number(val))) nota = Number(val);
+      }
+
+      counts[val] = (counts[val] || 0) + 1;
+      
+      if (nota !== null) {
+        totalScoreCount++;
+        if (nota >= 9) promotores++;
+        else if (nota >= 7) passivos++;
+        else detratores++;
+      }
+    });
+
+    const total = items.length;
+    const score = totalScoreCount > 0 
+      ? Math.round(((promotores / totalScoreCount) - (detratores / totalScoreCount)) * 100)
+      : 0;
+
+    return { 
+      total, 
+      counts, 
+      promotores, 
+      passivos, 
+      detratores, 
+      naCount,
+      score,
+      totalScoreCount 
+    };
   };
 
-  return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold">{formulario.nome}</h1>
-          <Link to={`/f/${formulario.slug}`} target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1">
-            /f/{formulario.slug} <ExternalLink className="h-3 w-3" />
-          </Link>
+  // Filtered responses
+  const filteredRespostas = useMemo(() => {
+    let list = [...respostas];
+
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      list = list.filter(r =>
+        (r.respondente_nome || '').toLowerCase().includes(q) ||
+        (r.respondente_email || '').toLowerCase().includes(q) ||
+        (r.respondente_departamento || '').toLowerCase().includes(q)
+      );
+    }
+    if (dateFrom) list = list.filter(r => new Date(r.criado_em) >= new Date(dateFrom));
+    if (dateTo) list = list.filter(r => new Date(r.criado_em) <= new Date(dateTo + 'T23:59:59'));
+
+    list.sort((a, b) => {
+      const av = sortField === 'criado_em' ? new Date(a.criado_em).getTime() : (a.respondente_nome || '').toLowerCase();
+      const bv = sortField === 'criado_em' ? new Date(b.criado_em).getTime() : (b.respondente_nome || '').toLowerCase();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [respostas, searchText, dateFrom, dateTo, sortField, sortDir]);
+
+  // Export CSV
+  const handleExportCSV = () => {
+    const headers = ['#', 'Data', 'Respondente', 'E-mail', 'Departamento',
+      ...perguntas.filter(p => p.tipo !== 'secao').map(p => p.texto)];
+    const rows = filteredRespostas.map((r, i) => {
+      const base = [
+        i + 1,
+        new Date(r.criado_em).toLocaleString('pt-BR'),
+        r.respondente_nome || 'Anônimo',
+        r.respondente_email || '',
+        r.respondente_departamento || ''
+      ];
+      const answers = perguntas.filter(p => p.tipo !== 'secao').map(p => {
+        const items = respostaItens.filter(ri => ri.resposta_id === r.id && ri.pergunta_id === p.id);
+        return items.map(ri => {
+          try {
+            const parsed = JSON.parse(ri.valor);
+            if (parsed && 'linha' in parsed) return `${parsed.linha}: ${parsed.is_na ? 'N/A' : parsed.nota}`;
+          } catch {}
+          return ri.valor || '';
+        }).join(' | ');
+      });
+      return [...base, ...answers];
+    });
+
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${formulario?.slug || 'respostas'}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exportado com sucesso!');
+  };
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('desc'); }
+  };
+
+  // ─── Loading ──────────────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-12 w-1/3" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExportCSV} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted transition-colors">
-            <Download className="h-4 w-4" /> Exportar CSV
-          </button>
-          <button className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted transition-colors">
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  if (!formulario) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <p className="text-muted-foreground">Formulário não encontrado.</p>
+        <Link to="/admin/formularios" className="mt-4 text-sm text-primary underline">Voltar</Link>
+      </div>
+    );
+  }
+
+  const totalRespostas = respostas.length;
+  const hoje = respostas.filter(r => new Date(r.criado_em).toDateString() === new Date().toDateString()).length;
+  const semana = respostas.filter(r => {
+    const d = new Date(r.criado_em);
+    const now = new Date();
+    const diff = (now.getTime() - d.getTime()) / (1000 * 3600 * 24);
+    return diff <= 7;
+  }).length;
+  const taxaConclusao = totalRespostas > 0
+    ? Math.round(respostas.filter(r => r.finalizado).length / totalRespostas * 100)
+    : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Link to="/admin/formularios" className="hover:underline">Formulários</Link>
+            <span>/</span>
+            <span className="truncate">{formulario.nome}</span>
+          </div>
+          <h1 className="text-xl font-bold truncate">Respostas — {formulario.nome}</h1>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={loadData}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-muted transition-colors"
+          >
             <RefreshCw className="h-4 w-4" /> Atualizar
+          </button>
+          <Link
+            to={`/f/${formulario.slug}`}
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-muted transition-colors"
+          >
+            <ExternalLink className="h-4 w-4" /> Ver pesquisa
+          </Link>
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Download className="h-4 w-4" /> Exportar CSV
           </button>
         </div>
       </div>
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <MetricCard label="Total de respostas" value={String(respostas.length)} />
-        {npsStats && (
-          <>
-            <MetricCard label="Score NPS" value={String(npsStats.score)} valueClass={npsColor(npsStats.score)} />
-            <MetricCard label="Promotores" value={String(npsStats.promotores)} subtitle={`${Math.round(npsStats.promotores / npsStats.total * 100)}%`} valueClass="text-success" />
-            <MetricCard label="Detratores" value={String(npsStats.detratores)} subtitle={`${Math.round(npsStats.detratores / npsStats.total * 100)}%`} valueClass="text-destructive" />
-          </>
-        )}
+      {/* Metric Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard label="Total de Respostas" value={String(totalRespostas)} subtitle="desde o início" />
+        <MetricCard label="Hoje" value={String(hoje)} subtitle={new Date().toLocaleDateString('pt-BR')} />
+        <MetricCard label="Últimos 7 dias" value={String(semana)} subtitle="tendência recente" />
+        <MetricCard
+          label="Taxa de Conclusão"
+          value={`${taxaConclusao}%`}
+          subtitle="respostas finalizadas"
+          valueClass={taxaConclusao >= 70 ? 'text-emerald-500' : taxaConclusao >= 40 ? 'text-amber-500' : 'text-destructive'}
+        />
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b mb-6">
+      <div className="flex border-b gap-1 print:hidden">
         <TabButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>Dashboard</TabButton>
-        <TabButton active={activeTab === 'respostas'} onClick={() => setActiveTab('respostas')}>Respostas</TabButton>
-        {hasMatriz && <TabButton active={activeTab === 'departamentos'} onClick={() => setActiveTab('departamentos')}>Departamentos</TabButton>}
+        <TabButton active={activeTab === 'respostas'} onClick={() => setActiveTab('respostas')}>Respostas ({totalRespostas})</TabButton>
+        {hasMatriz && (
+          <TabButton active={activeTab === 'departamentos'} onClick={() => setActiveTab('departamentos')}>Departamentos</TabButton>
+        )}
+        <TabButton active={activeTab === 'parecer'} onClick={() => setActiveTab('parecer')}>Parecer Técnico</TabButton>
+        <TabButton active={activeTab === 'calculos'} onClick={() => setActiveTab('calculos')}>Entendendo os Cálculos</TabButton>
       </div>
 
-      {/* Tab content */}
+      {/* ── Dashboard Tab ────────────────────────────────────────────────────────── */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-4">
-          {npsStats && (
-            <div className="rounded-xl border bg-card p-5">
-              <h3 className="text-[15px] font-bold mb-3">NPS Geral</h3>
-              <div className="flex items-center gap-4">
-                <span className={`text-4xl font-bold ${npsColor(npsStats.score)}`}>{npsStats.score}</span>
-                <div className="flex-1">
-                  <div className="flex h-4 rounded-full overflow-hidden">
-                    <div className="bg-destructive" style={{ width: `${npsStats.detratores / npsStats.total * 100}%` }} />
-                    <div className="bg-warning" style={{ width: `${npsStats.passivos / npsStats.total * 100}%` }} />
-                    <div className="bg-success" style={{ width: `${npsStats.promotores / npsStats.total * 100}%` }} />
+        <div className="space-y-5">
+          {/* NPS Geral + Trend */}
+          <div className="grid md:grid-cols-2 gap-5">
+            {npsStats && npsStats.total > 0 && (
+              <div className="rounded-xl border bg-card p-5">
+                <div className="flex items-center gap-1.5 mb-4 group relative">
+                  <h3 className="text-[15px] font-bold">NPS Geral</h3>
+                  <Info className="h-3.5 w-3.5 text-primary/60 cursor-help" />
+                  
+                  {/* Detailed NPS Help Tooltip */}
+                  <div className="absolute left-0 bottom-full mb-3 hidden group-hover:block w-80 p-5 bg-popover/95 backdrop-blur-sm border rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-bold border-b border-border pb-2 mb-2">O que é o Score NPS?</p>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          O <strong>Net Promoter Score</strong> é o padrão global para medir satisfação e lealdade. 
+                          Ele responde: "Em uma escala de 0 a 10, o quanto você recomendaria este serviço?"
+                        </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2 py-1">
+                        <div className="text-center p-2 rounded-lg bg-emerald-50 text-emerald-700">
+                          <p className="text-[10px] font-bold">9-10</p>
+                          <p className="text-[8px] font-medium uppercase">Promotores</p>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-amber-50 text-amber-700">
+                          <p className="text-[10px] font-bold">7-8</p>
+                          <p className="text-[8px] font-medium uppercase">Passivos</p>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-red-50 text-red-700">
+                          <p className="text-[10px] font-bold">0-6</p>
+                          <p className="text-[8px] font-medium uppercase">Detratores</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-muted/50 p-3 rounded-xl border border-border/50">
+                        <p className="text-[10px] font-bold mb-1 underline decoration-primary/40">Zonas de Desempenho:</p>
+                        <div className="space-y-1.5 text-[10px]">
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> Excelência</span>
+                            <span className="font-bold">75 a 100</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"/> Qualidade</span>
+                            <span className="font-bold">50 a 74</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"/> Aperfeiçoamento</span>
+                            <span className="font-bold">0 a 49</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500"/> Crítica</span>
+                            <span className="font-bold">-100 a -1</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] p-2 bg-primary/5 rounded border border-primary/20 text-primary italic text-center">
+                        Fórmula: (% Promotores) - (% Detratores)
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>Detratores {Math.round(npsStats.detratores / npsStats.total * 100)}%</span>
-                    <span>Passivos {Math.round(npsStats.passivos / npsStats.total * 100)}%</span>
-                    <span>Promotores {Math.round(npsStats.promotores / npsStats.total * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-5">
+                  <div className="text-center">
+                    <p className={`text-5xl font-black ${npsColor(npsStats.score)}`}>{npsStats.score}</p>
+                    <p className={`text-xs font-medium mt-1 ${npsColor(npsStats.score)} uppercase tracking-wider`}>{npsLabel(npsStats.score)}</p>
+                    <div className="mt-4 bg-muted/50 p-2 rounded-lg border border-border/50">
+                      <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Memória de Cálculo:</p>
+                      <p className="text-[11px] font-black text-primary/80">
+                        {Math.round(npsStats.promotores / npsStats.total * 100)}% <span className="text-[9px] font-medium opacity-60">(Prom.)</span> 
+                        {' - '} 
+                        {Math.round(npsStats.detratores / npsStats.total * 100)}% <span className="text-[9px] font-medium opacity-60">(Detr.)</span>
+                        {' = '} 
+                        {npsStats.score}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Promotores ({npsStats.promotores})</span>
+                        <span>{npsStats.total > 0 ? Math.round(npsStats.promotores / npsStats.total * 100) : 0}%</span>
+                      </div>
+                      <div className="bg-muted rounded-full h-2.5">
+                        <div className="bg-emerald-500 rounded-full h-2.5" style={{ width: `${npsStats.total > 0 ? npsStats.promotores / npsStats.total * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Passivos ({npsStats.passivos})</span>
+                        <span>{npsStats.total > 0 ? Math.round(npsStats.passivos / npsStats.total * 100) : 0}%</span>
+                      </div>
+                      <div className="bg-muted rounded-full h-2.5">
+                        <div className="bg-amber-500 rounded-full h-2.5" style={{ width: `${npsStats.total > 0 ? npsStats.passivos / npsStats.total * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Detratores ({npsStats.detratores})</span>
+                        <span>{npsStats.total > 0 ? Math.round(npsStats.detratores / npsStats.total * 100) : 0}%</span>
+                      </div>
+                      <div className="bg-muted rounded-full h-2.5">
+                        <div className="bg-destructive rounded-full h-2.5" style={{ width: `${npsStats.total > 0 ? npsStats.detratores / npsStats.total * 100 : 0}%` }} />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
+            {/* Trend Chart */}
+            {trendData.length > 1 && (
+              <div className="rounded-xl border bg-card p-5">
+                <h3 className="text-[15px] font-bold mb-4">Tendência de Respostas (14 dias)</h3>
+                <div className="h-[160px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="count" name="Respostas" stroke="#3b82f6" fill="url(#colorCount)" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Per-question stats */}
           {perguntas.filter(p => !['secao', 'texto_longo', 'texto_curto'].includes(p.tipo)).map(p => {
             const stats = getPerguntaStats(p.id);
             if (stats.total === 0) return null;
+            const entries = Object.entries(stats.counts).sort((a, b) => b[1] - a[1]);
+
             return (
-              <div key={p.id} className="rounded-xl border bg-card p-5">
-                <h3 className="text-sm font-bold mb-3">{p.texto}</h3>
-                {(p.tipo === 'radio' || p.tipo === 'checkbox' || p.tipo === 'likert') && (
-                  <div className="space-y-2">
-                    {Object.entries(stats.counts).sort((a, b) => b[1] - a[1]).map(([val, count]) => (
+              <div key={p.id} className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b pb-4">
+                  <div className="group relative flex items-center gap-1.5">
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">{p.texto}</h3>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground italic">Base: {stats.totalScoreCount} {p.tipo === 'matriz_nps' ? 'avaliações' : 'respostas'}</p>
+                        {p.tipo === 'matriz_nps' && (
+                          <span className="text-[10px] bg-primary/10 px-1.5 py-0.5 rounded font-medium text-primary">
+                            Contagem por linha/setor
+                          </span>
+                        )}
+                        {stats.naCount > 0 && (
+                          <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium text-muted-foreground">
+                            {stats.naCount} N/A (Não se aplica)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Info className="h-3.5 w-3.5 text-primary/60 cursor-help mt-[-14px]" />
+                    <div className="absolute left-0 bottom-full mb-3 hidden group-hover:block w-72 p-4 bg-popover border rounded-xl shadow-2xl z-50">
+                      <p className="text-xs font-bold border-b pb-2 mb-2">Resumo NPS da Questão</p>
+                      <div className="space-y-2.5 text-[10px] leading-tight">
+                        <div className="flex gap-2 items-start">
+                          <div className="w-2 h-2 rounded bg-emerald-500 mt-0.5 shrink-0" />
+                          <p><strong>Promotores (9-10):</strong> Clientes leais e satisfeitos que recomendariam sua marca ativamente.</p>
+                        </div>
+                        <div className="flex gap-2 items-start">
+                          <div className="w-2 h-2 rounded bg-amber-500 mt-0.5 shrink-0" />
+                          <p><strong>Passivos (7-8):</strong> Clientes satisfeitos porém neutros. Não indicam, mas também não falam mal.</p>
+                        </div>
+                        <div className="flex gap-2 items-start">
+                          <div className="w-2 h-2 rounded bg-red-500 mt-0.5 shrink-0" />
+                          <p><strong>Detratores (0-6):</strong> Clientes insatisfeitos que podem gerar boca-a-boca negativo e cancelamentos.</p>
+                        </div>
+                        <div className="pt-1 text-center font-black bg-muted/30 py-1.5 rounded text-[11px] text-primary">
+                          Score = % Promotores - % Detratores
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {p.tipo === 'matriz_nps' && (
+                    <div className="text-right flex flex-col items-end">
+                      <p className={`text-2xl font-black ${npsColor(stats.score)}`}>{stats.score}</p>
+                      <div className="flex items-center gap-1 group relative">
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground whitespace-nowrap">NPS Questão</p>
+                        <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" />
+                        <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-popover border rounded-lg shadow-xl z-50 text-[10px] leading-tight font-medium text-muted-foreground">
+                          <p className="font-bold border-b pb-1 mb-1 text-primary">Memória de Cálculo:</p>
+                          <p className="font-black text-foreground mb-1">
+                            {Math.round(stats.promotores / Math.max(stats.totalScoreCount, 1) * 100)}% (Prom.) - {Math.round(stats.detratores / Math.max(stats.totalScoreCount, 1) * 100)}% (Detr.) = {stats.score}
+                          </p>
+                          <p className="opacity-70">
+                            Score NPS calculado exclusivamente para os dados desta pergunta.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* NPS Breakdown for Matrix or NPS Simples */}
+                {(p.tipo === 'matriz_nps' || p.tipo === 'nps_simples') && (
+                  <div className="grid sm:grid-cols-2 gap-8 py-2">
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase">Distribuição NPS</p>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium">Promotores (9-10)</span>
+                            <span className="text-emerald-600 font-bold">{stats.totalScoreCount > 0 ? Math.round(stats.promotores / stats.totalScoreCount * 100) : 0}%</span>
+                          </div>
+                          <div className="bg-muted rounded-full h-2">
+                            <div className="bg-emerald-500 rounded-full h-full" style={{ width: `${stats.totalScoreCount > 0 ? stats.promotores / stats.totalScoreCount * 100 : 0}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium">Passivos (7-8)</span>
+                            <span className="text-amber-600 font-bold">{stats.totalScoreCount > 0 ? Math.round(stats.passivos / stats.totalScoreCount * 100) : 0}%</span>
+                          </div>
+                          <div className="bg-muted rounded-full h-2">
+                            <div className="bg-amber-500 rounded-full h-full" style={{ width: `${stats.totalScoreCount > 0 ? stats.passivos / stats.totalScoreCount * 100 : 0}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium">Detratores (0-6)</span>
+                            <span className="text-destructive font-bold">{stats.totalScoreCount > 0 ? Math.round(stats.detratores / stats.totalScoreCount * 100) : 0}%</span>
+                          </div>
+                          <div className="bg-muted rounded-full h-2">
+                            <div className="bg-destructive rounded-full h-full" style={{ width: `${stats.totalScoreCount > 0 ? stats.detratores / stats.totalScoreCount * 100 : 0}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">Distribuição de Notas</p>
+                        {p.tipo === 'matriz_nps' && (
+                          <span className="text-[9px] text-muted-foreground italic">*Cada linha conta como 1 voto</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {Array.from({ length: 11 }, (_, i) => i).map(n => {
+                          const count = stats.counts[String(n)] || 0;
+                          const percentage = stats.totalScoreCount > 0 ? (count / stats.totalScoreCount * 100) : 0;
+                          if (count === 0) return null;
+                          return (
+                            <div key={n} className="flex flex-col items-center bg-muted/30 rounded p-2 min-w-[45px]">
+                              <span className={`text-xs font-bold ${n >= 9 ? 'text-emerald-600' : n >= 7 ? 'text-amber-600' : 'text-destructive'}`}>{n}</span>
+                              <span className="text-[10px] font-medium">{count}</span>
+                              <div className="w-full bg-muted h-1 mt-1 rounded-full overflow-hidden">
+                                <div className={`h-full ${n >= 9 ? 'bg-emerald-500' : n >= 7 ? 'bg-amber-500' : 'bg-destructive'}`} style={{ width: `${percentage}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Radio / Dropdown → Pie + Bars */}
+                {(p.tipo === 'radio' || p.tipo === 'dropdown') && (
+                  <div className="grid md:grid-cols-2 gap-4 items-center">
+                    <div className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={entries.map(([name, value]) => ({ name, value }))}
+                            cx="50%" cy="50%" outerRadius={80} dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                          >
+                            {entries.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-2">
+                      {entries.map(([val, count], idx) => (
+                        <div key={val} className="flex items-center gap-3">
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: COLORS[idx % COLORS.length] }} />
+                          <span className="text-xs flex-1 truncate" title={val}>{val}</span>
+                          <div className="w-24 bg-muted rounded-full h-2">
+                            <div className="rounded-full h-2" style={{ width: `${count / stats.total * 100}%`, background: COLORS[idx % COLORS.length] }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8 text-right">{Math.round(count / stats.total * 100)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Checkbox / Likert → Horizontal Bar Chart */}
+                {(p.tipo === 'checkbox' || p.tipo === 'likert') && (
+                  <div className="space-y-2 pt-2">
+                    {entries.map(([val, count]) => (
                       <div key={val} className="flex items-center gap-3">
-                        <span className="text-xs w-40 truncate">{val}</span>
+                        <span className="text-xs w-40 truncate" title={val}>{val}</span>
                         <div className="flex-1 bg-muted rounded-full h-2.5">
                           <div className="bg-primary rounded-full h-2.5 transition-all" style={{ width: `${count / stats.total * 100}%` }} />
                         </div>
                         <span className="text-xs text-muted-foreground w-10 text-right">{Math.round(count / stats.total * 100)}%</span>
+                        <span className="text-xs text-muted-foreground w-6 text-right">{count}</span>
                       </div>
                     ))}
-                  </div>
-                )}
-                {p.tipo === 'nps_simples' && (
-                  <div className="space-y-2">
-                    {Array.from({ length: 11 }, (_, i) => i).map(n => {
-                      const count = stats.counts[String(n)] || 0;
-                      if (count === 0) return null;
-                      return (
-                        <div key={n} className="flex items-center gap-3">
-                          <span className="text-xs w-8 text-center font-medium">{n}</span>
-                          <div className="flex-1 bg-muted rounded-full h-2.5">
-                            <div className={`rounded-full h-2.5 transition-all ${n >= 9 ? 'bg-success' : n >= 7 ? 'bg-warning' : 'bg-destructive'}`} style={{ width: `${count / stats.total * 100}%` }} />
-                          </div>
-                          <span className="text-xs text-muted-foreground w-10 text-right">{count}</span>
-                        </div>
-                      );
-                    })}
                   </div>
                 )}
               </div>
             );
           })}
+
+          {totalRespostas === 0 && (
+            <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
+              Nenhuma resposta recebida ainda.
+            </div>
+          )}
         </div>
       )}
 
+      {/* ── Respostas Tab ─────────────────────────────────────────────────────────── */}
       {activeTab === 'respostas' && (
-        <div className="rounded-xl border bg-card overflow-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left px-4 py-3 font-medium">#</th>
-                <th className="text-left px-4 py-3 font-medium">Data</th>
-                {perguntas.filter(p => p.tipo !== 'secao').slice(0, 5).map(p => (
-                  <th key={p.id} className="text-left px-4 py-3 font-medium max-w-[150px] truncate">{p.texto}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {respostas.slice(0, 20).map((r, i) => (
-                <tr key={r.id} className="border-b hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-2.5 text-muted-foreground">{i + 1}</td>
-                  <td className="px-4 py-2.5 text-xs">{new Date(r.criado_em).toLocaleDateString("pt-BR")}</td>
-                  {perguntas.filter(p => p.tipo !== 'secao').slice(0, 5).map(p => {
-                    const item = respostaItens.find(ri => ri.resposta_id === r.id && ri.pergunta_id === p.id);
-                    return <td key={p.id} className="px-4 py-2.5 text-xs max-w-[150px] truncate">{item?.valor || '—'}</td>;
-                  })}
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, e-mail ou departamento..."
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="text-sm rounded-md border bg-background px-2 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <span className="text-muted-foreground text-xs">até</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className="text-sm rounded-md border bg-background px-2 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {(dateFrom || dateTo || searchText) && (
+                <button
+                  onClick={() => { setSearchText(''); setDateFrom(''); setDateTo(''); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left px-4 py-3 font-medium">#</th>
+                  <th
+                    className="text-left px-4 py-3 font-medium cursor-pointer hover:text-primary select-none"
+                    onClick={() => toggleSort('criado_em')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Data
+                      {sortField === 'criado_em' ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null}
+                    </span>
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 font-medium cursor-pointer hover:text-primary select-none"
+                    onClick={() => toggleSort('respondente_nome')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Respondente
+                      {sortField === 'respondente_nome' ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null}
+                    </span>
+                  </th>
+                  {perguntas.filter(p => !['secao', 'matriz_nps'].includes(p.tipo)).slice(0, 3).map(p => (
+                    <th key={p.id} className="text-left px-4 py-3 font-medium max-w-[160px] truncate">{p.texto}</th>
+                  ))}
+                  <th className="text-center px-4 py-3 font-medium">Detalhes</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="px-4 py-3 text-xs text-muted-foreground border-t">
-            Mostrando {Math.min(20, respostas.length)} de {respostas.length} respostas
+              </thead>
+              <tbody>
+                {filteredRespostas.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground italic">
+                      Nenhuma resposta encontrada.
+                    </td>
+                  </tr>
+                ) : filteredRespostas.map((r, i) => (
+                  <tr key={r.id} className="border-b hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap">
+                      {new Date(r.criado_em).toLocaleDateString('pt-BR')}<br />
+                      <span className="text-muted-foreground">{new Date(r.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      <span className="font-medium">{r.respondente_nome || 'Anônimo'}</span>
+                      {r.respondente_email && <span className="block text-muted-foreground text-[11px]">{r.respondente_email}</span>}
+                      {r.respondente_departamento && <span className="block text-muted-foreground text-[11px]">{r.respondente_departamento}</span>}
+                    </td>
+                    {perguntas.filter(p => !['secao', 'matriz_nps'].includes(p.tipo)).slice(0, 3).map(p => {
+                      const item = respostaItens.find(ri => ri.resposta_id === r.id && ri.pergunta_id === p.id);
+                      return (
+                        <td key={p.id} className="px-4 py-3 text-xs max-w-[160px] truncate" title={item?.valor || ''}>
+                          {item?.valor || '—'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => setSelectedResponse(r)}
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-muted p-2 transition-colors"
+                        title="Ver resposta completa"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-4 py-3 text-xs text-muted-foreground border-t flex items-center justify-between">
+              <span>Exibindo {filteredRespostas.length} de {totalRespostas} respostas</span>
+              {filteredRespostas.length !== totalRespostas && (
+                <span className="text-primary">{totalRespostas - filteredRespostas.length} ocultas por filtro</span>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'departamentos' && (
-        <div className="rounded-xl border bg-card overflow-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left px-4 py-3 font-medium">Departamento</th>
-                <th className="text-left px-4 py-3 font-medium">Média</th>
-                <th className="text-left px-4 py-3 font-medium w-48">Progresso</th>
-                <th className="text-right px-4 py-3 font-medium">Avaliações</th>
-                <th className="text-right px-4 py-3 font-medium">N/A</th>
-              </tr>
-            </thead>
-            <tbody>
-              {matrizMedias.map(m => (
-                <tr key={m.linha} className="border-b hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-2.5 text-xs font-medium">{m.linha}</td>
-                  <td className="px-4 py-2.5 font-bold">{m.media}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="bg-muted rounded-full h-2.5">
-                      <div
-                        className={`rounded-full h-2.5 transition-all ${m.media >= 7 ? 'bg-success' : m.media >= 5 ? 'bg-warning' : 'bg-destructive'}`}
-                        style={{ width: `${m.media * 10}%` }}
-                      />
+      {/* ── Departamentos Tab ─────────────────────────────────────────────────────── */}
+      {activeTab === 'departamentos' && hasMatriz && (
+        <div className="space-y-8">
+          {!hasMatrizData ? (
+            <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
+              Nenhum dado de departamento encontrado ainda.
+            </div>
+          ) : (
+            matrizPerguntas.map(p => {
+              const stats = matrizMedias[p.id];
+              if (!stats || stats.length === 0) return null;
+              return (
+                <div key={p.id} className="space-y-4">
+                  <h2 className="text-base font-bold border-b pb-2">{p.texto}</h2>
+
+                  {/* Ranking table */}
+                  <div className="rounded-xl border bg-card overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left px-4 py-3 font-medium">Departamento</th>
+                          <th className="text-center px-4 py-3 font-medium">Média</th>
+                          <th className="text-center px-4 py-3 font-medium">Score NPS</th>
+                          <th className="text-left px-4 py-3 font-medium w-48">Desempenho</th>
+                          <th className="text-right px-4 py-3 font-medium">Avaliações</th>
+                          <th className="text-right px-4 py-3 font-medium">N/A</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.map((m, idx) => {
+                          const color = m.media >= 7 ? 'bg-emerald-500' : m.media >= 5 ? 'bg-amber-500' : 'bg-destructive';
+                          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                          return (
+                            <tr key={m.linha} className="border-b hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-3 font-medium text-xs">{medal} {m.linha}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`text-lg font-black ${m.media >= 7 ? 'text-emerald-500' : m.media >= 5 ? 'text-amber-500' : 'text-destructive'}`}>
+                                  {m.media}
+                                </span>
+                                <span className="text-muted-foreground text-xs">/10</span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {m.scoreNps !== null ? (
+                                  <span className={`font-bold text-sm ${m.scoreNps >= 50 ? 'text-emerald-500' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-destructive'}`}>
+                                    {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
+                                  </span>
+                                ) : <span className="text-muted-foreground">—</span>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="bg-muted rounded-full h-2.5">
+                                  <div className={`rounded-full h-2.5 transition-all ${color}`} style={{ width: `${m.media * 10}%` }} />
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right text-xs font-medium">{m.avaliacoes}</td>
+                              <td className="px-4 py-3 text-right text-xs text-muted-foreground">{m.na}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Bar Chart */}
+                  <div className="rounded-xl border bg-card p-5">
+                    <h3 className="text-sm font-bold mb-4">Média por Departamento</h3>
+                    <div className="h-[280px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                          <XAxis type="number" domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={{ fontSize: 11 }} />
+                          <YAxis dataKey="linha" type="category" width={130} tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(v: any) => [Number(v).toFixed(1), 'Média']} />
+                          <Bar dataKey="media" name="Média" radius={[0, 4, 4, 0]}>
+                            {stats.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={entry.media >= 7 ? '#10b981' : entry.media >= 5 ? '#f59e0b' : '#ef4444'}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-xs">{m.avaliacoes}</td>
-                  <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{m.na}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
+
+      {/* ── Parecer Técnico Tab ────────────────────────────────────────────────── */}
+      {activeTab === 'parecer' && (
+        <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+          <div className="flex justify-end print:hidden">
+            <button 
+              onClick={() => window.print()} 
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity shadow-sm"
+            >
+              <Download className="h-4 w-4" /> Gerar PDF / Imprimir
+            </button>
+          </div>
+
+          <div className="bg-white text-slate-900 p-10 rounded-xl border shadow-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0">
+            {/* Report Header */}
+            <div className="flex justify-between items-start border-b-2 border-slate-200 pb-8 mb-8">
+              <div className="space-y-1">
+                <h1 className="text-2xl font-black uppercase tracking-tight text-slate-800">Parecer Técnico de Pesquisa</h1>
+                <p className="text-slate-500 font-medium">{formulario?.nome}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Relatório Executivo</p>
+                <p className="text-sm text-slate-500">{new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+              </div>
+            </div>
+
+            {/* Executive Summary Cards */}
+            <div className="grid grid-cols-3 gap-6 mb-10">
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Score NPS Geral</p>
+                <div className="flex items-baseline gap-2">
+                  <span className={`text-3xl font-black ${npsColor(npsStats.score)}`}>{npsStats.score}</span>
+                  <span className={`text-[10px] font-bold uppercase ${npsColor(npsStats.score)}`}>{npsLabel(npsStats.score)}</span>
+                </div>
+              </div>
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Amostragem</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-black text-slate-700">{totalRespostas}</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Respostas</span>
+                </div>
+              </div>
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Engajamento</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-black text-slate-700">{taxaConclusao}%</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Conclusão</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-12 font-sans">
+              {/* Iteramos sobre cada pergunta de matriz para dar um parecer individualizado se houver mais de uma */}
+              {matrizPerguntas.map((p, pIdx) => {
+                const stats = matrizMedias[p.id];
+                if (!stats || stats.length === 0) return null;
+
+                return (
+                  <section key={p.id} className={pIdx > 0 ? "pt-10 border-t border-slate-100" : ""}>
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 uppercase tracking-widest mb-6">
+                      <div className="w-1.5 h-5 bg-primary rounded-full" /> 
+                      Análise: {p.texto}
+                    </h2>
+                    
+                    <div className="grid md:grid-cols-2 gap-8">
+                      {/* Top 3 */}
+                      <div className="space-y-3">
+                        <p className="text-[11px] font-bold text-emerald-600 uppercase flex items-center gap-1.5">
+                          <TrendingUp className="h-4 w-4" /> Melhores Desempenhos (Top 3)
+                        </p>
+                        <div className="bg-emerald-50/40 rounded-2xl border border-emerald-100/50 p-5 space-y-4">
+                          {stats.slice(0, 3).map((m, i) => (
+                            <div key={i} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-3">
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">{i+1}º</span>
+                                <span className="font-semibold text-slate-700">{m.linha}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold text-emerald-600 block">{m.media.toFixed(1)}</span>
+                                <span className="text-[9px] text-slate-400 uppercase font-bold">Média</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Bottom 3 */}
+                      <div className="space-y-3">
+                        <p className="text-[11px] font-bold text-red-600 uppercase flex items-center gap-1.5">
+                          <TrendingDown className="h-4 w-4" /> Pontos de Atenção (Gargalos)
+                        </p>
+                        <div className="bg-red-50/40 rounded-2xl border border-red-100/50 p-5 space-y-4">
+                          {stats.slice(-3).reverse().map((m, i) => (
+                            <div key={i} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-3">
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700 text-[10px] font-black">{i+1}º</span>
+                                <span className="font-semibold text-slate-700">{m.linha}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold text-red-600 block">{m.media.toFixed(1)}</span>
+                                <span className="text-[9px] text-slate-400 uppercase font-bold">Média</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
+
+              {!matrizPerguntas.length && (
+                <div className="p-12 text-center border-2 border-dashed rounded-2xl text-slate-400 italic text-sm">
+                  Dados de matriz não identificados para este formulário.
+                </div>
+              )}
+
+              {/* Technical Conclusion */}
+              <section className="bg-slate-900 text-slate-100 p-8 rounded-2xl shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <FileText className="h-24 w-24" />
+                </div>
+                <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                  <Info className="h-5 w-5 text-primary" />
+                  Conclusão e Recomendações
+                </h2>
+                <div className="space-y-4 text-sm leading-relaxed opacity-90">
+                  <p>
+                    Com base no Score NPS de <strong className={npsColor(npsStats.score)}>{npsStats.score}</strong> ({npsLabel(npsStats.score)}), 
+                    conclui-se que o nível de satisfação geral está em patamar 
+                    <strong> {npsLabel(npsStats.score)}</strong>.
+                  </p>
+                  <p>
+                    {npsStats.score >= 50 
+                      ? "A organização apresenta uma forte base de promotores. Recomenda-se manter as políticas atuais e focar nos pequenos focos de detração identificados nos departamentos com menor score."
+                      : "Identificamos uma necessidade de intervenção nos processos de atendimento/suporte, especialmente nos departamentos listados como 'Pontos de Atenção'. Um plano de ação imediato para ouvir os detratores é sugerido."
+                    }
+                  </p>
+                  <div className="pt-6 mt-6 border-t border-slate-700 flex justify-between items-center text-[10px] text-slate-400">
+                    <span>Documento gerado automaticamente pelo Sistema de Pesquisas</span>
+                    <span>Assinatura Técnica Digital</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+            {/* Page 2 - Methodology and Detailed Results */}
+            <div className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100">
+              <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 mb-8 flex items-center gap-3">
+                <div className="w-2 h-8 bg-slate-800 rounded-sm" />
+                Detalhamento Meta-Analítico
+              </h2>
+
+              <div className="grid md:grid-cols-2 gap-10">
+                {/* Methodology Explanation */}
+                <div className="space-y-6">
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                    <h3 className="text-sm font-bold uppercase tracking-wider mb-4 text-slate-600">Entendendo a Metodologia NPS</h3>
+                    <div className="space-y-4 text-xs leading-relaxed text-slate-600">
+                      <p>
+                        O <strong>Net Promoter Score (NPS)</strong> é calculado com base na subtração da porcentagem de Promotores pela porcentagem de Detratores.
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" />
+                          <p><strong>Promotores (9-10):</strong> Clientes entusiasmados que impulsionam o crescimento.</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1" />
+                          <p><strong>Passivos (7-8):</strong> Clientes satisfeitos, mas indiferentes, vulneráveis à concorrência.</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1" />
+                          <p><strong>Detratores (0-6):</strong> Clientes infelizes que podem danificar sua marca.</p>
+                        </div>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border text-center font-bold text-slate-800">
+                        NPS = % Promotores - % Detratores
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 text-white p-6 rounded-2xl">
+                    <h3 className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">Status do Score</h3>
+                    <p className="text-sm italic opacity-90">
+                      "Um score de <strong>{npsStats.score}</strong> é classificado como <strong>{npsLabel(npsStats.score)}</strong>. 
+                      Isso indica que para cada detrator, existem aproximadamente <strong>{(npsStats.promotores / Math.max(npsStats.detratores, 1)).toFixed(1)}</strong> promotores no ecossistema atual."
+                    </p>
+                  </div>
+                </div>
+
+                {/* Question Breakdown */}
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600">Resultados por Indicador</h3>
+                  <div className="space-y-4">
+                    {perguntas.filter(p => !['secao'].includes(p.tipo)).map(p => {
+                      const stats = getPerguntaStats(p.id);
+                      if (stats.total === 0) return null;
+                      
+                      return (
+                        <div key={p.id} className="border-b border-slate-100 pb-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[10px] font-black text-slate-700 leading-tight flex items-center gap-1" title={p.texto}>
+                              {p.tipo === 'matriz_nps' ? <span className="text-primary mr-1">[MATRIZ]</span> : null}
+                              {p.texto}
+                              <span className="text-[10px] opacity-40 font-normal" title="Pontuação NPS Individual desta pergunta">(?)</span>
+                            </p>
+                            <span className="text-[8px] text-slate-400 italic">
+                              {stats.totalScoreCount} {p.tipo === 'matriz_nps' ? 'avaliações' : 'respostas'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                              <div className="bg-emerald-500 h-full border-r border-white/20" style={{ width: `${stats.totalScoreCount > 0 ? (stats.promotores / stats.totalScoreCount * 100) : 0}%` }} />
+                              <div className="bg-amber-400 h-full border-r border-white/20" style={{ width: `${stats.totalScoreCount > 0 ? (stats.passivos / stats.totalScoreCount * 100) : 0}%` }} />
+                              <div className="bg-red-500 h-full" style={{ width: `${stats.totalScoreCount > 0 ? (stats.detratores / stats.totalScoreCount * 100) : 0}%` }} />
+                            </div>
+                            <span className={`text-xs font-black min-w-[30px] rounded px-1.5 py-0.5 ${npsColor(stats.score)} bg-slate-50 border`}>{stats.score}</span>
+                          </div>
+                          <div className="flex justify-between text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
+                            <span>{stats.promotores} Prom.</span>
+                            <span>{stats.passivos} Pass.</span>
+                            <span>{stats.detratores} Detr.</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Qualitative Responses (Direct Answers Table) */}
+              <div className="mt-12 pt-12 border-t border-slate-100 print:break-before-page">
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-800 mb-6 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Consolidado Qualitativo (Detalhamento de Respostas)
+                </h3>
+                
+                <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-[9px]">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-3 py-3 font-bold text-slate-500 uppercase tracking-wider">Respondente</th>
+                          <th className="px-3 py-3 font-bold text-slate-500 uppercase tracking-wider">Depto</th>
+                          {/* Dynamic Columns: Texto + Matrix Items */}
+                          {(() => {
+                            const cols: any[] = [];
+                            perguntas.filter(p => !['secao'].includes(p.tipo)).forEach(p => {
+                              if (p.tipo === 'matriz_nps') {
+                                const rows = p.opcoes?.linhas || [];
+                                rows.forEach((row: string) => {
+                                  cols.push({ id: `${p.id}-${row}`, isMatrix: true, parentId: p.id, parentText: p.texto, texto: row });
+                                });
+                              } else {
+                                cols.push(p);
+                              }
+                            });
+                            return cols.slice(0, 10);
+                          })().map((col, i) => (
+                            <th key={i} className="px-3 py-3 font-bold text-slate-500 uppercase tracking-wider border-l border-slate-100 min-w-[100px]">
+                              {col.isMatrix ? (
+                                <div className="leading-tight">
+                                  <span className="opacity-40 block text-[7px] mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">{col.parentText}</span>
+                                  {col.texto}
+                                </div>
+                              ) : (
+                                <span className="truncate block" title={col.texto}>{col.texto}</span>
+                              )}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {respostas.filter(r => r.finalizado).slice(0, 50).map((r, idx) => {
+                          const flattenedCols: any[] = [];
+                          perguntas.filter(p => !['secao'].includes(p.tipo)).forEach(p => {
+                            if (p.tipo === 'matriz_nps') {
+                              const rows = p.opcoes?.linhas || [];
+                              rows.forEach((row: string) => {
+                                flattenedCols.push({ idIdx: `${p.id}-${row}`, isMatrix: true, parentId: p.id, texto: row });
+                              });
+                            } else {
+                              flattenedCols.push(p);
+                            }
+                          });
+                          const currentCols = flattenedCols.slice(0, 10);
+
+                          return (
+                            <tr key={r.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'}>
+                              <td className="px-3 py-2.5 font-bold text-slate-700 capitalize whitespace-nowrap">{r.respondente_nome || 'Anônimo'}</td>
+                              <td className="px-3 py-2.5 text-slate-500">{r.respondente_departamento || '—'}</td>
+                              {currentCols.map((col, i) => {
+                                let ans = null;
+                                if (col.isMatrix) {
+                                  ans = respostaItens.find(ri => {
+                                    if (ri.resposta_id !== r.id || ri.pergunta_id !== col.parentId) return false;
+                                    try {
+                                      const parsed = JSON.parse(ri.valor);
+                                      return parsed.linha === col.texto;
+                                    } catch { return false; }
+                                  });
+                                } else {
+                                  ans = respostaItens.find(ri => ri.resposta_id === r.id && ri.pergunta_id === col.id);
+                                }
+                                
+                                let displayVal = '—';
+                                if (ans) {
+                                  if (col.isMatrix) {
+                                    try {
+                                      const parsed = JSON.parse(ans.valor);
+                                      displayVal = parsed.is_na ? 'N/A' : parsed.nota;
+                                    } catch {
+                                      displayVal = ans.valor;
+                                    }
+                                  } else {
+                                    displayVal = ans.valor;
+                                  }
+                                }
+
+                                const scoreNum = Number(displayVal);
+                                const isNumeric = !isNaN(scoreNum) && displayVal !== '—' && displayVal !== 'N/A';
+
+                                return (
+                                  <td key={i} className={`px-3 py-2.5 border-l border-slate-50/50 ${ans ? 'text-slate-900 border-l' : 'text-slate-200'}`}>
+                                    <div className="flex items-center gap-1.5">
+                                      {isNumeric && (
+                                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${scoreNum >= 9 ? 'bg-emerald-500' : scoreNum >= 7 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                                      )}
+                                      <span className="truncate max-w-[120px]">{displayVal}</span>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-3 bg-slate-50 text-[8px] text-center text-slate-400 italic">
+                    * Exibindo as primeiras 50 respostas e até 8 colunas de dados. O relatório completo requer exportação CSV.
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-center text-[10px] text-slate-400 mt-12">
+              © {new Date().getFullYear()} - Sistema de Gestão de Pesquisas e Satisfação
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Entendendo os Cálculos Tab ────────────────────────────────────────── */}
+      {activeTab === 'calculos' && (
+        <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
+          <div className="bg-card border rounded-2xl p-8 shadow-sm">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" />
+              Guia Completo de Métricas e Cálculos
+            </h2>
+
+            <div className="space-y-12">
+              {/* Seção 1: NPS Geral */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b pb-2">
+                  <div className="w-1.5 h-4 bg-emerald-500 rounded-full" />
+                  <h3 className="font-bold text-lg">O que é o Score NPS?</h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  O <strong>Net Promoter Score (NPS)</strong> é uma metodologia global para medir a satisfação e lealdade do cliente através de uma única pergunta: 
+                  <span className="italic"> "Em uma escala de 0 a 10, o quanto você recomendaria este serviço/empresa?"</span>
+                </p>
+                
+                <div className="grid sm:grid-cols-3 gap-4 py-4">
+                  <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
+                    <p className="text-xl font-black text-emerald-700">9 - 10</p>
+                    <p className="text-xs font-bold text-emerald-600 uppercase mt-1">Promotores</p>
+                    <p className="text-[10px] text-emerald-800/60 mt-2">Clientes leais, entusiasmados e que indicam seu serviço.</p>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl text-center">
+                    <p className="text-xl font-black text-amber-700">7 - 8</p>
+                    <p className="text-xs font-bold text-amber-600 uppercase mt-1">Passivos</p>
+                    <p className="text-[10px] text-amber-800/60 mt-2">Satisfeitos, mas neutros. Não indicam, mas não falam mal.</p>
+                  </div>
+                  <div className="bg-destructive/5 border border-destructive/10 p-4 rounded-xl text-center">
+                    <p className="text-xl font-black text-destructive">0 - 6</p>
+                    <p className="text-xs font-bold text-destructive uppercase mt-1">Detratores</p>
+                    <p className="text-[10px] text-destructive/60 mt-2">Insatisfeitos que podem gerar boca-a-boca negativo.</p>
+                  </div>
+                </div>
+
+                <div className="bg-muted/50 p-6 rounded-2xl border text-center">
+                  <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Fórmula de Cálculo</p>
+                  <p className="text-2xl font-black text-primary tracking-tighter">NPS = % Promotores - % Detratores</p>
+                  <p className="text-[11px] text-muted-foreground mt-2">O resultado varia de <strong>-100 a +100</strong>.</p>
+                </div>
+              </section>
+
+              {/* Seção 2: Matriz NPS */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b pb-2">
+                  <div className="w-1.5 h-4 bg-primary rounded-full" />
+                  <h3 className="font-bold text-lg">Entendendo a Pergunta de Matriz</h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  A <strong>Matriz NPS</strong> permite avaliar múltiplos itens (setores, atributos ou serviços) em uma única estrutura, 
+                  economizando tempo do respondente e permitindo comparativos diretos.
+                </p>
+                
+                <div className="space-y-4 bg-muted/20 p-5 rounded-xl border-l-4 border-primary">
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary shrink-0">1</div>
+                    <div>
+                      <p className="font-bold text-sm">Cada linha é um voto único</p>
+                      <p className="text-xs text-muted-foreground font-medium text-primary bg-primary/5 p-2 rounded mt-1 border border-primary/10"> 
+                        <strong>Aviso Importante:</strong> Se uma pessoa avalia 10 setores em uma matriz, ela gera 
+                        <strong> 10 pontos de dados</strong>. Por isso, a soma das notas pode ser maior que o número de pessoas.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary shrink-0">2</div>
+                    <div>
+                      <p className="font-bold text-sm">Score por Setor vs Score da Questão</p>
+                      <ul className="text-xs text-muted-foreground list-disc ml-4 space-y-1 mt-1">
+                        <li><strong>Por Setor:</strong> O NPS é calculado isoladamente para aquela linha específica (Top/Bottom 3).</li>
+                        <li><strong>NPS Questão:</strong> É o NPS de "Volume". Soma-se todos os votos de todas as linhas e faz o cálculo sobre o total da pergunta.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Seção 3: Zonas de Desempenho */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b pb-2">
+                  <div className="w-1.5 h-4 bg-blue-500 rounded-full" />
+                  <h3 className="font-bold text-lg">Zonas de Desempenho (Benchmarks)</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  O Score final é enquadrado em zonas que indicam a saúde da relação com os clientes:
+                </p>
+
+                <div className="rounded-xl border border-border overflow-hidden">
+                  {[
+                    { zone: "Zona de Excelência", range: "75 a 100", color: "bg-emerald-500", text: "Excelente fidelidade e satisfação." },
+                    { zone: "Zona de Qualidade", range: "50 a 74", color: "bg-blue-500", text: "Bom nível, mas há pontos pontuais a ajustar." },
+                    { zone: "Zona de Aperfeiçoamento", range: "0 a 49", color: "bg-amber-500", text: "Nível neutro. Empate de forças entre críticos e fãs." },
+                    { zone: "Zona Crítica", range: "-100 a -1", color: "bg-red-500", text: "Necessidade de ação imediada. Base majoritariamente insatisfeita." },
+                  ].map((z, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-4 border-b last:border-0 bg-white hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${z.color}`} />
+                        <div>
+                          <p className="text-sm font-bold">{z.zone}</p>
+                          <p className="text-[11px] text-muted-foreground">{z.text}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-black p-1.5 bg-muted rounded border border-border/50">{z.range}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Response Detail Modal ─────────────────────────────────────────────────── */}
+      <Dialog open={!!selectedResponse} onOpenChange={() => setSelectedResponse(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Resposta</DialogTitle>
+          </DialogHeader>
+          {selectedResponse && (
+            <div className="space-y-5">
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-4 text-sm bg-muted/30 rounded-lg p-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Data</p>
+                  <p className="font-medium">{new Date(selectedResponse.criado_em).toLocaleString('pt-BR')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Respondente</p>
+                  <p className="font-medium">{selectedResponse.respondente_nome || 'Anônimo'}</p>
+                  {selectedResponse.respondente_email && <p className="text-xs text-muted-foreground">{selectedResponse.respondente_email}</p>}
+                </div>
+                {selectedResponse.respondente_departamento && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Departamento</p>
+                    <p className="font-medium">{selectedResponse.respondente_departamento}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${selectedResponse.finalizado ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {selectedResponse.finalizado ? '✓ Finalizado' : '⏳ Incompleto'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Answers */}
+              <div className="space-y-4">
+                <h3 className="font-bold border-b pb-2">Respostas</h3>
+                {perguntas.filter(p => p.tipo !== 'secao').map(p => {
+                  const items = respostaItens.filter(ri => ri.resposta_id === selectedResponse.id && ri.pergunta_id === p.id);
+
+                  return (
+                    <div key={p.id} className="space-y-1.5">
+                      <p className="font-medium text-sm">{p.texto}</p>
+                      {items.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic bg-muted/50 px-3 py-2 rounded">Não respondido</p>
+                      ) : (
+                        <div className="bg-muted/50 p-3 rounded-md space-y-1">
+                          {items.map((item, idx) => {
+                            let display: any = item.valor;
+                            try {
+                              const parsed = JSON.parse(item.valor);
+                              if (parsed && 'linha' in parsed) {
+                                display = (
+                                  <span>
+                                    <strong>{parsed.linha}:</strong>{' '}
+                                    {parsed.is_na
+                                      ? <span className="text-muted-foreground">N/A</span>
+                                      : <span className={`font-bold ${parsed.nota >= 9 ? 'text-emerald-600' : parsed.nota >= 7 ? 'text-amber-600' : 'text-red-500'}`}>{parsed.nota}</span>
+                                    }
+                                  </span>
+                                );
+                              } else if (Array.isArray(parsed)) {
+                                display = parsed.join(', ');
+                              }
+                            } catch {}
+                            return <div key={idx} className="text-sm">{display}</div>;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -221,8 +1426,8 @@ function MetricCard({ label, value, subtitle, valueClass }: { label: string; val
   return (
     <div className="rounded-xl border bg-card p-4">
       <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p className={`text-[28px] font-bold leading-tight ${valueClass || ''}`}>{value}</p>
-      {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+      <p className={`text-[28px] font-black leading-tight ${valueClass || ''}`}>{value}</p>
+      {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
     </div>
   );
 }
@@ -231,7 +1436,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+      className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
     >
       {children}
     </button>

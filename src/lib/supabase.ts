@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/supabase'
 
 // Configuração de variáveis de ambiente para Vite
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.REACT_APP_SUPABASE_URL || '';
@@ -10,32 +11,30 @@ const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY ||
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('🚨 Supabase environment variables not found!');
   console.error('📋 URL:', supabaseUrl);
-  console.error('📋 Key:', supabaseAnonKey ? 'exists' : 'missing');
-  throw new Error('Supabase credentials missing');
+  throw new Error('Faltam variáveis de ambiente do Supabase')
 }
 
-// Criar apenas UMA instância do cliente Supabase (singleton)
-// Usar uma variável global para garantir singleton mesmo com hot reload
-declare global {
-  var __supabase: ReturnType<typeof createClient> | undefined;
-}
+// Cliente padrão para usuários autenticados (usa localStorage)
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
 
-if (!globalThis.__supabase) {
-  globalThis.__supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storageKey: 'sb-ftxzpvrdyqnofxjmyeqd-auth-token',
-      flowType: 'pkce'
-    }
-  });
-}
+// Cliente para rotas públicas (não usa localStorage, evita erro de Auth Lock)
+export const supabasePublic = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  }
+})
 
-export const supabase = globalThis.__supabase;
-
-// Para operações admin, usar o mesmo cliente (não criar nova instância)
-export const supabaseAdmin = supabase;
+// Cliente admin usando a Service Role Key (Atenção: só deve ser usado para funções administrativas específicas)
+export const supabaseAdmin = supabaseServiceRoleKey 
+  ? createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  : null
 
 // Helper para autenticação
 export const authHelpers = {

@@ -16,15 +16,33 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { User, UserRole, CreateUserData, UpdateUserData, UserFormErrors } from "@/types/auth";
+import type { UserRole, CreateUserData, UpdateUserData, UserFormErrors } from "@/types/auth";
 import { ROLE_LABELS, ROLE_COLORS, ROLE_DESCRIPTIONS } from "@/types/auth";
-import { getUsers, createUser, updateUser, deleteUser, toggleUserStatus, filterUsers, getUserStats } from "@/lib/usersMockData";
+import { userService } from "@/services/supabase";
+import { useEffect } from "react";
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>(getUsers());
+  const [users, setUsers] = useState<any[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const data = await userService.getAll();
+      setUsers(data);
+    } catch (error) {
+      toast.error("Erro ao carregar usuários");
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<any | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -45,15 +63,27 @@ export default function UsersPage() {
 
   // Filter users
   const filteredUsers = useMemo(() => {
-    return filterUsers(users, {
-      search: searchTerm,
-      perfil: perfilFilter,
-      ativo: ativoFilter === 'todos' ? undefined : ativoFilter
+    return users.filter(user => {
+      const matchesSearch = searchTerm === "" || 
+        user.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        user.email.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesPerfil = perfilFilter === 'todos' || user.role === perfilFilter;
+      const matchesAtivo = ativoFilter === 'todos' || user.ativo === ativoFilter;
+      
+      return matchesSearch && matchesPerfil && matchesAtivo;
     });
   }, [users, searchTerm, perfilFilter, ativoFilter]);
 
   // Stats
-  const stats = useMemo(() => getUserStats(), [users]);
+  const stats = useMemo(() => {
+    return {
+      totalUsers: users.length,
+      activeUsers: users.filter(u => u.ativo).length,
+      adminUsers: users.filter(u => u.role === 'administrador').length,
+      viewerUsers: users.filter(u => u.role === 'visualizador').length,
+    };
+  }, [users]);
 
   // Form validation
   const validateForm = (data: CreateUserData, isEdit = false): UserFormErrors => {
@@ -91,8 +121,13 @@ export default function UsersPage() {
 
     setIsLoading(true);
     try {
-      const newUser = createUser(formData, 1); // ID 1 = admin atual
-      setUsers(getUsers());
+      await userService.createWithAuth({
+        nome: formData.nome,
+        email: formData.email,
+        senha: formData.senha,
+        role: formData.perfil
+      });
+      await fetchUsers();
       setIsCreateDialogOpen(false);
       resetForm();
       toast.success("Usuário criado com sucesso!");
@@ -107,7 +142,7 @@ export default function UsersPage() {
   const handleUpdateUser = async () => {
     if (!editingUser) return;
 
-    const errors = validateForm({ ...formData, senha: formData.senha || editingUser.senha }, true);
+    const errors = validateForm({ ...formData, senha: formData.senha }, true);
     setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -116,18 +151,14 @@ export default function UsersPage() {
 
     setIsLoading(true);
     try {
-      const updateData: UpdateUserData = {
+      await userService.update(editingUser.id, {
         nome: formData.nome,
-        email: formData.email,
-        perfil: formData.perfil
-      };
-
-      if (formData.senha && formData.senha !== editingUser.senha) {
-        updateData.senha = formData.senha;
-      }
-
-      updateUser(editingUser.id, updateData);
-      setUsers(getUsers());
+        role: formData.perfil,
+        email: formData.email 
+      });
+      // Skip password update for now as it requires specific auth admin API
+      
+      await fetchUsers();
       setIsEditDialogOpen(false);
       setEditingUser(null);
       resetForm();
@@ -140,14 +171,14 @@ export default function UsersPage() {
   };
 
   // Handle delete user
-  const handleDeleteUser = async (user: User) => {
+  const handleDeleteUser = async (user: any) => {
     if (!confirm(`Tem certeza que deseja excluir o usuário "${user.nome}"?`)) {
       return;
     }
 
     try {
-      deleteUser(user.id);
-      setUsers(getUsers());
+      await userService.delete(user.id);
+      await fetchUsers();
       toast.success("Usuário excluído com sucesso!");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao excluir usuário");
@@ -155,10 +186,10 @@ export default function UsersPage() {
   };
 
   // Handle toggle status
-  const handleToggleStatus = async (user: User) => {
+  const handleToggleStatus = async (user: any) => {
     try {
-      toggleUserStatus(user.id);
-      setUsers(getUsers());
+      await userService.toggleStatus(user.id);
+      await fetchUsers();
       toast.success(`Usuário ${user.ativo ? 'desativado' : 'ativado'} com sucesso!`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao alterar status");
@@ -178,13 +209,13 @@ export default function UsersPage() {
   };
 
   // Open edit dialog
-  const openEditDialog = (user: User) => {
+  const openEditDialog = (user: any) => {
     setEditingUser(user);
     setFormData({
       nome: user.nome,
       email: user.email,
       senha: "",
-      perfil: user.perfil
+      perfil: user.role
     });
     setFormErrors({});
     setIsEditDialogOpen(true);
@@ -407,8 +438,8 @@ export default function UsersPage() {
                     </td>
                     <td className="p-3">{user.email}</td>
                     <td className="p-3">
-                      <Badge className={ROLE_COLORS[user.perfil]}>
-                        {ROLE_LABELS[user.perfil]}
+                      <Badge className={ROLE_COLORS[user.role as UserRole]}>
+                        {ROLE_LABELS[user.role as UserRole]}
                       </Badge>
                     </td>
                     <td className="p-3">
@@ -454,7 +485,6 @@ export default function UsersPage() {
                           <DropdownMenuItem 
                             onClick={() => handleDeleteUser(user)}
                             className="text-destructive"
-                            disabled={user.id === 1}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Excluir

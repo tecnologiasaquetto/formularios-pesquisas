@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { formularios, updateFormulario, type Formulario } from "@/lib/mockData";
-import { ArrowLeft, Save, Upload, Palette, Calendar, Eye, EyeOff } from "lucide-react";
+import { formularioService } from "@/services/supabase";
+import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
+import { ArrowLeft, Save, Upload, Palette, Calendar, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 const PRESET_COLORS = [
@@ -21,46 +23,76 @@ const PRESET_COLORS = [
 ];
 
 export default function FormSettingsPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const formularioId = Number(id);
-  const formulario = formularios.find(f => f.id === formularioId);
+  const { setItemName, resetItemName } = useBreadcrumb();
 
-  const [formData, setFormData] = useState<Partial<Formulario>>({});
+  const [formData, setFormData] = useState<any>({});
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (formulario) {
-      setFormData({
-        nome: formulario.nome,
-        slug: formulario.slug,
-        descricao: formulario.descricao || "",
-        mensagem_fim: formulario.mensagem_fim || "",
-        logo_url: formulario.logo_url || "",
-        data_inicio: formulario.data_inicio || "",
-        data_fim: formulario.data_fim || "",
-        mostrar_capa: formulario.mostrar_capa ?? true,
-        cor_tema: formulario.cor_tema || "#3b82f6",
-      });
-    }
-  }, [formulario]);
+    const loadForm = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const data = await formularioService.getById(id);
+        if (data) {
+          setFormData({
+            nome: data.nome,
+            slug: data.slug,
+            descricao: data.descricao || "",
+            mensagem_fim: data.mensagem_fim || "",
+            logo_url: data.logo_url || "",
+            data_inicio: data.data_inicio || "",
+            data_fim: data.data_fim || "",
+            mostrar_capa: data.mostrar_capa ?? true,
+            cor_tema: data.cor_tema || "#3b82f6",
+          });
+          if (data.nome) {
+            setItemName(data.nome);
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao carregar formulário:", error);
+        toast.error("Erro ao carregar formulário");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadForm();
+    return () => resetItemName();
+  }, [id]);
 
-  if (!formulario) {
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!formData.nome && !loading) {
     return (
       <div className="text-center py-12">
         <p className="text-destructive">Formulário não encontrado.</p>
+        <Button variant="link" onClick={() => navigate("/admin/formularios")}>Voltar para a lista</Button>
       </div>
     );
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!id) return;
     setSaving(true);
 
     try {
-      updateFormulario(formularioId, formData as Formulario);
+      await formularioService.update(id, formData);
       toast.success("Configurações salvas com sucesso!");
     } catch (error) {
+      console.error("Erro ao salvar:", error);
       toast.error("Erro ao salvar configurações");
     } finally {
       setSaving(false);
@@ -68,10 +100,10 @@ export default function FormSettingsPage() {
   };
 
   const handleImageUpload = () => {
-    // Simulação de upload - na implementação real, faria upload para um serviço
+    // Simulação de upload - na implementação real, faria upload para Supabase Storage
     const mockUrl = "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=100&h=100&fit=crop&crop=center";
     setFormData(prev => ({ ...prev, logo_url: mockUrl }));
-    toast.success("Logo carregado com sucesso!");
+    toast.success("Logo carregado com sucesso! (Simulação)");
   };
 
   return (
@@ -80,7 +112,7 @@ export default function FormSettingsPage() {
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
-          onClick={() => navigate(`/admin/formularios/${formularioId}/construtor`)}
+          onClick={() => navigate(`/admin/formularios/${id}/construtor`)}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Voltar
@@ -245,24 +277,12 @@ export default function FormSettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Preview */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Preview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center text-sm text-muted-foreground">
-              <p>Link público: <code className="bg-muted px-2 py-1 rounded">/f/{formData.slug}</code></p>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Actions */}
         <div className="flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate(`/admin/formularios/${formularioId}/construtor`)}
+            onClick={() => navigate(`/admin/formularios/${id}/construtor`)}
           >
             Cancelar
           </Button>

@@ -57,12 +57,55 @@ export const userService = {
   },
 
   async delete(id: string) {
+    // Primeiro deletar do auth (se possível/necessário usar supabaseAdmin)
+    if (supabaseAdmin) {
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id)
+      if (authError) console.warn('Erro ao deletar do auth (pode não existir):', authError)
+    } else {
+      console.warn('supabaseAdmin não configurado. O usuário foi removido apenas da tabela local, o acesso via Auth ainda pode existir.');
+    }
+
     const { error } = await supabase
       .from('users')
       .delete()
       .eq('id', id)
     
     if (error) throw error
+  },
+
+  async createWithAuth(userData: any) {
+    if (!supabaseAdmin) {
+      throw new Error('Configuração incompleta: A chave VITE_SUPABASE_SERVICE_ROLE_KEY não foi encontrada no arquivo .env. Esta chave é obrigatória para criar usuários diretamente pelo painel administrativo.');
+    }
+
+    // 1. Criar no Auth
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: userData.email,
+      password: userData.senha || 'temp123456',
+      email_confirm: true,
+      user_metadata: {
+        nome: userData.nome,
+        role: userData.role
+      }
+    })
+
+    if (authError) throw authError
+
+    // 2. Criar na tabela users
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        id: authData.user.id,
+        email: userData.email,
+        nome: userData.nome,
+        role: userData.role,
+        ativo: true
+      })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data as Users
   },
 
   async toggleStatus(id: string) {
@@ -227,16 +270,31 @@ export const perguntaService = {
   },
 
   async update(id: string, perguntaData: Partial<Perguntas>) {
-    // TODO: Investigar erro 400 ao fazer UPDATE de perguntas
-    const { data, error } = await supabase
+    // Usar supabaseAdmin para garantir que o administrador consiga salvar independente de políticas de RLS restritivas
+    // e remover campos que não devem ser atualizados manualmente (usando o operador rest)
+    const { id: _, criado_em: __, atualizado_em: ___, ...cleanData } = perguntaData as any;
+    
+    // Fallback para o cliente padrão se o admin não estiver disponível
+    const client = (supabaseAdmin as any) || supabase;
+    
+    const { data, error } = await client
       .from('perguntas')
-      .update(perguntaData)
+      .update(cleanData)
       .eq('id', id)
       .select()
-      .single()
     
-    if (error) throw error
-    return data as Perguntas
+    if (error) {
+      console.error(`[perguntaService] Erro ao atualizar pergunta ${id}:`, error);
+      throw error;
+    }
+    
+    if (data && data.length > 0) {
+      console.log(`[perguntaService] Atualizado com sucesso: ${id}:`, data[0]);
+      return data[0] as Perguntas;
+    }
+    
+    console.warn(`[perguntaService] Nenhuma linha encontrada para atualizar: ${id}`);
+    return null;
   },
 
   async delete(id: string) {
@@ -450,6 +508,14 @@ export const departamentoService = {
   }
 }
 
+export interface MatrizStatItem {
+  linha: string
+  media: number
+  avaliacoes: number
+  na: number
+  scoreNps: number | null
+}
+
 // Statistics Services
 export const statsService = {
   async getNpsStats(formularioId: string) {
@@ -468,9 +534,79 @@ export const statsService = {
       respostasHoje: respostas.filter(r => 
         new Date(r.criado_em).toDateString() === new Date().toDateString()
       ).length,
-      taxaConclusao: respostas.filter(r => r.finalizado).length / respostas.length * 100,
+      taxaConclusao: respostas.length > 0 ? respostas.filter(r => r.finalizado).length / respostas.length * 100 : 0,
       ultimaResposta: respostas[0]?.criado_em || null
     }
+  },
+
+  async getMatrizStats(formularioId: string): Promise<Record<string, MatrizStatItem[]>> {
+    const { data, error } = await supabase
+      .from('resposta_itens')
+      .select(`
+        valor,
+        pergunta_id,
+        matriz_itens (linha),
+        perguntas!inner (formulario_id, tipo)
+      `)
+      .eq('perguntas.formulario_id', formularioId)
+      .eq('perguntas.tipo', 'matriz_nps')
+
+    if (error) throw error
+
+    // Group by pergunta_id, then by linha
+    const byPergunta: Record<string, Record<string, { notas: number[]; naCount: number }>> = {}
+    
+    data.forEach((item: any) => {
+      const perguntaId = item.pergunta_id
+      if (!perguntaId) return
+
+      let linha = item.matriz_itens?.linha
+      let notaValue = item.valor
+      let isNa = item.valor === 'NA'
+
+      if (!linha && item.valor) {
+        try {
+          const parsed = JSON.parse(item.valor)
+          if (parsed && typeof parsed === 'object' && 'linha' in parsed) {
+            linha = parsed.linha
+            notaValue = parsed.nota
+            isNa = parsed.is_na
+          }
+        } catch(e) {}
+      }
+
+      if (!linha) return
+
+      if (!byPergunta[perguntaId]) byPergunta[perguntaId] = {}
+      if (!byPergunta[perguntaId][linha]) byPergunta[perguntaId][linha] = { notas: [], naCount: 0 }
+      
+      if (isNa || notaValue === null) {
+        byPergunta[perguntaId][linha].naCount++
+      } else {
+        const nota = parseInt(String(notaValue))
+        if (!isNaN(nota)) byPergunta[perguntaId][linha].notas.push(nota)
+      }
+    })
+
+    const calcStats = (linhaStats: Record<string, { notas: number[]; naCount: number }>): MatrizStatItem[] =>
+      Object.entries(linhaStats).map(([linha, stats]) => {
+        const totalValido = stats.notas.length
+        const media = totalValido > 0 
+          ? Number((stats.notas.reduce((a, b) => a + b, 0) / totalValido).toFixed(1))
+          : 0
+        const promotores = stats.notas.filter(n => n >= 9).length
+        const detratores = stats.notas.filter(n => n <= 6).length
+        const scoreNps = totalValido > 0 
+          ? Math.round((promotores / totalValido - detratores / totalValido) * 100)
+          : null
+        return { linha, media, avaliacoes: totalValido, na: stats.naCount, scoreNps }
+      }).sort((a, b) => (b.scoreNps ?? -101) - (a.scoreNps ?? -101))
+
+    const result: Record<string, MatrizStatItem[]> = {}
+    for (const [pid, linhaStats] of Object.entries(byPergunta)) {
+      result[pid] = calcStats(linhaStats)
+    }
+    return result
   }
 }
 

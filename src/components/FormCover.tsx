@@ -4,10 +4,9 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, Clock, ChevronRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { type Formulario } from "@/lib/mockData";
 
 interface FormCoverProps {
-  formulario: Formulario;
+  formulario: any;
   onStart: () => void;
 }
 
@@ -88,14 +87,14 @@ export default function FormCover({ formulario, onStart }: FormCoverProps) {
             {/* Título */}
             <div className="space-y-2">
               <h1 
-                className="text-3xl md:text-4xl font-bold text-gray-900"
+                className="text-3xl md:text-4xl font-bold text-foreground"
                 style={{ color: formulario.cor_tema || undefined }}
               >
                 {formulario.nome}
               </h1>
               
               {formulario.descricao && (
-                <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
                   {formulario.descricao}
                 </p>
               )}
@@ -103,7 +102,7 @@ export default function FormCover({ formulario, onStart }: FormCoverProps) {
 
             {/* Informações de Período */}
             {(formulario.data_inicio || formulario.data_fim) && (
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-gray-500">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
                 {formulario.data_inicio && (
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
@@ -120,7 +119,7 @@ export default function FormCover({ formulario, onStart }: FormCoverProps) {
             )}
 
             {/* Informações Adicionais */}
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Building2 className="w-4 h-4" />
               <span>Pesquisa Confidencial • Anônima</span>
             </div>
@@ -142,7 +141,7 @@ export default function FormCover({ formulario, onStart }: FormCoverProps) {
             </div>
 
             {/* Termos */}
-            <div className="text-xs text-gray-400 max-w-md mx-auto">
+            <div className="text-xs text-muted-foreground/60 max-w-md mx-auto">
               <p>
                 Ao participar, você concorda com nossos termos de uso e política de privacidade. 
                 Suas respostas são confidenciais e serão usadas apenas para fins de melhoria contínua.
