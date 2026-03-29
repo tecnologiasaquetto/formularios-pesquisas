@@ -1330,12 +1330,12 @@ export default function RespostasPage() {
               <div className="bg-white p-8 rounded-2xl border-4 border-gray-200 shadow-lg" id="qrcode-container">
                 <QRCodeSVG 
                   value={`https://formularios-pesquisas.vercel.app/f/${formulario?.slug}`}
-                  size={300}
+                  size={400}
                   level="H"
                   includeMargin={true}
                 />
               </div>
-              <p className="text-center mt-6 text-lg font-semibold text-gray-700">
+              <p className="text-center mt-8 text-xl font-bold text-gray-700">
                 Escaneie o QR Code para participar
               </p>
             </div>
