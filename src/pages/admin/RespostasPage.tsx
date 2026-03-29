@@ -20,6 +20,8 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, RadialBarChart, RadialBar, Legend
 } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -1217,19 +1219,89 @@ export default function RespostasPage() {
       {/* ── Divulgação Tab ────────────────────────────────────────────────── */}
       {activeTab === 'divulgacao' && (
         <div className="space-y-6 animate-in fade-in duration-500">
-          {/* Botão de Impressão */}
-          <div className="flex justify-end print:hidden">
+          {/* Botões de Download */}
+          <div className="flex justify-end gap-3 print:hidden">
             <button 
-              onClick={() => window.print()}
+              onClick={async () => {
+                try {
+                  const qrElement = document.querySelector('#qrcode-container svg') as SVGElement;
+                  if (!qrElement) return;
+                  
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  const svgData = new XMLSerializer().serializeToString(qrElement);
+                  const img = new Image();
+                  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                  const url = URL.createObjectURL(svgBlob);
+                  
+                  img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx?.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+                    
+                    canvas.toBlob((blob) => {
+                      if (blob) {
+                        const link = document.createElement('a');
+                        link.download = `qrcode-${formulario?.slug}.png`;
+                        link.href = URL.createObjectURL(blob);
+                        link.click();
+                        toast.success('QR Code baixado com sucesso!');
+                      }
+                    });
+                  };
+                  img.src = url;
+                } catch (error) {
+                  toast.error('Erro ao baixar QR Code');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity"
+            >
+              <Download className="h-4 w-4" />
+              Baixar QR Code
+            </button>
+            <button 
+              onClick={async () => {
+                try {
+                  const element = document.getElementById('material-divulgacao');
+                  if (!element) return;
+                  
+                  toast.info('Gerando PDF...');
+                  
+                  const canvas = await html2canvas(element, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff'
+                  });
+                  
+                  const imgData = canvas.toDataURL('image/png');
+                  const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                  });
+                  
+                  const imgWidth = 210; // A4 width in mm
+                  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                  
+                  pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                  pdf.save(`divulgacao-${formulario?.slug}.pdf`);
+                  
+                  toast.success('PDF baixado com sucesso!');
+                } catch (error) {
+                  toast.error('Erro ao gerar PDF');
+                }
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
             >
-              <Printer className="h-4 w-4" />
-              Imprimir Material
+              <Download className="h-4 w-4" />
+              Baixar PDF
             </button>
           </div>
 
           {/* Material para Impressão */}
-          <div className="bg-white rounded-2xl border shadow-sm p-12 print:shadow-none print:border-0">
+          <div id="material-divulgacao" className="bg-white rounded-2xl border shadow-sm p-12 print:shadow-none print:border-0">
             {/* Logo */}
             {formulario?.logo_url && (
               <div className="flex justify-center mb-8">
@@ -1255,9 +1327,9 @@ export default function RespostasPage() {
 
             {/* QR Code */}
             <div className="flex flex-col items-center justify-center mb-12">
-              <div className="bg-white p-8 rounded-2xl border-4 border-gray-200 shadow-lg">
+              <div className="bg-white p-8 rounded-2xl border-4 border-gray-200 shadow-lg" id="qrcode-container">
                 <QRCodeSVG 
-                  value={`${window.location.origin}/f/${formulario?.slug}`}
+                  value={`https://formularios-pesquisas.vercel.app/f/${formulario?.slug}`}
                   size={300}
                   level="H"
                   includeMargin={true}
@@ -1265,14 +1337,6 @@ export default function RespostasPage() {
               </div>
               <p className="text-center mt-6 text-lg font-semibold text-gray-700">
                 Escaneie o QR Code para participar
-              </p>
-            </div>
-
-            {/* URL Alternativa */}
-            <div className="text-center mb-12">
-              <p className="text-sm text-gray-500 mb-2">Ou acesse diretamente:</p>
-              <p className="text-lg font-mono bg-gray-100 px-6 py-3 rounded-lg inline-block">
-                {window.location.origin}/f/{formulario?.slug}
               </p>
             </div>
 
@@ -1310,18 +1374,19 @@ export default function RespostasPage() {
             </div>
           </div>
 
-          {/* Instruções para Impressão */}
+          {/* Instruções para Divulgação */}
           <div className="bg-card border rounded-xl p-6 print:hidden">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <Info className="h-5 w-5 text-blue-500" />
               Instruções para Divulgação
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Clique em "Imprimir Material" para gerar o cartaz</li>
-              <li>• Recomendamos imprimir em tamanho A4 ou maior</li>
-              <li>• Fixe o material em locais de fácil visualização (murais, quadros de avisos, etc.)</li>
-              <li>• O QR Code pode ser escaneado por qualquer smartphone</li>
+              <li>• <strong>Baixar PDF:</strong> Gera um arquivo PDF pronto para impressão em A4</li>
+              <li>• <strong>Baixar QR Code:</strong> Baixa apenas a imagem do QR Code em PNG</li>
+              <li>• Fixe o material em locais de fácil visualização (murais, quadros de avisos, chão de fábrica)</li>
+              <li>• O QR Code pode ser escaneado por qualquer smartphone com câmera</li>
               <li>• Certifique-se de que a pesquisa está ativa antes de divulgar</li>
+              <li>• O link aponta para: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://formularios-pesquisas.vercel.app</code></li>
             </ul>
           </div>
         </div>
