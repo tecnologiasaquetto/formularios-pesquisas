@@ -11,7 +11,7 @@ import {
   useMatrizStats 
 } from "@/hooks/useRespostas";
 import type { MatrizStatItem } from "@/services/supabase";
-import { RefreshCw, Download, ExternalLink, Eye, Info, Search, Calendar, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, FileText } from "lucide-react";
+import { RefreshCw, Download, ExternalLink, Eye, Info, Search, Calendar, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, FileText, QrCode, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, RadialBarChart, RadialBar, Legend
 } from "recharts";
+import { QRCodeSVG } from "qrcode.react";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -52,7 +53,7 @@ export default function RespostasPage() {
     refetchMatriz();
   };
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos' | 'parecer' | 'calculos'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos' | 'parecer' | 'calculos' | 'divulgacao'>('dashboard');
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
 
   // Filters for Respostas tab
@@ -307,12 +308,16 @@ export default function RespostasPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b gap-1 print:hidden">
+      <div className="flex border-b gap-1 print:hidden overflow-x-auto">
         <TabButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>Dashboard</TabButton>
         <TabButton active={activeTab === 'respostas'} onClick={() => setActiveTab('respostas')}>Respostas ({totalRespostas})</TabButton>
         {hasMatriz && (
           <TabButton active={activeTab === 'departamentos'} onClick={() => setActiveTab('departamentos')}>Departamentos</TabButton>
         )}
+        <TabButton active={activeTab === 'divulgacao'} onClick={() => setActiveTab('divulgacao')}>
+          <QrCode className="h-4 w-4 mr-1" />
+          Divulgação
+        </TabButton>
         <TabButton active={activeTab === 'parecer'} onClick={() => setActiveTab('parecer')}>Parecer Técnico</TabButton>
         <TabButton active={activeTab === 'calculos'} onClick={() => setActiveTab('calculos')}>Entendendo os Cálculos</TabButton>
       </div>
@@ -1205,6 +1210,119 @@ export default function RespostasPage() {
             <p className="text-center text-[10px] text-slate-400 mt-12">
               © {new Date().getFullYear()} - Sistema de Gestão de Pesquisas e Satisfação
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Divulgação Tab ────────────────────────────────────────────────── */}
+      {activeTab === 'divulgacao' && (
+        <div className="space-y-6 animate-in fade-in duration-500">
+          {/* Botão de Impressão */}
+          <div className="flex justify-end print:hidden">
+            <button 
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir Material
+            </button>
+          </div>
+
+          {/* Material para Impressão */}
+          <div className="bg-white rounded-2xl border shadow-sm p-12 print:shadow-none print:border-0">
+            {/* Logo */}
+            {formulario?.logo_url && (
+              <div className="flex justify-center mb-8">
+                <img 
+                  src={formulario.logo_url} 
+                  alt="Logo" 
+                  className="max-h-24 object-contain"
+                />
+              </div>
+            )}
+
+            {/* Título */}
+            <div className="text-center mb-12">
+              <h1 className="text-4xl font-bold mb-4" style={{ color: formulario?.cor_tema || '#3b82f6' }}>
+                {formulario?.nome}
+              </h1>
+              {formulario?.descricao && (
+                <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                  {formulario.descricao}
+                </p>
+              )}
+            </div>
+
+            {/* QR Code */}
+            <div className="flex flex-col items-center justify-center mb-12">
+              <div className="bg-white p-8 rounded-2xl border-4 border-gray-200 shadow-lg">
+                <QRCodeSVG 
+                  value={`${window.location.origin}/f/${formulario?.slug}`}
+                  size={300}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+              <p className="text-center mt-6 text-lg font-semibold text-gray-700">
+                Escaneie o QR Code para participar
+              </p>
+            </div>
+
+            {/* URL Alternativa */}
+            <div className="text-center mb-12">
+              <p className="text-sm text-gray-500 mb-2">Ou acesse diretamente:</p>
+              <p className="text-lg font-mono bg-gray-100 px-6 py-3 rounded-lg inline-block">
+                {window.location.origin}/f/{formulario?.slug}
+              </p>
+            </div>
+
+            {/* Informações Adicionais */}
+            <div className="border-t pt-8 mt-8">
+              <div className="grid md:grid-cols-2 gap-6 text-sm text-gray-600">
+                {formulario?.data_inicio && (
+                  <div>
+                    <p className="font-semibold text-gray-700 mb-1">📅 Início da Pesquisa</p>
+                    <p>{new Date(formulario.data_inicio).toLocaleDateString('pt-BR', { 
+                      day: '2-digit', 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}</p>
+                  </div>
+                )}
+                {formulario?.data_fim && (
+                  <div>
+                    <p className="font-semibold text-gray-700 mb-1">⏰ Término da Pesquisa</p>
+                    <p>{new Date(formulario.data_fim).toLocaleDateString('pt-BR', { 
+                      day: '2-digit', 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  <strong>✨ Sua opinião é muito importante!</strong><br />
+                  A pesquisa é anônima e confidencial. Suas respostas nos ajudam a melhorar continuamente.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Instruções para Impressão */}
+          <div className="bg-card border rounded-xl p-6 print:hidden">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Info className="h-5 w-5 text-blue-500" />
+              Instruções para Divulgação
+            </h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Clique em "Imprimir Material" para gerar o cartaz</li>
+              <li>• Recomendamos imprimir em tamanho A4 ou maior</li>
+              <li>• Fixe o material em locais de fácil visualização (murais, quadros de avisos, etc.)</li>
+              <li>• O QR Code pode ser escaneado por qualquer smartphone</li>
+              <li>• Certifique-se de que a pesquisa está ativa antes de divulgar</li>
+            </ul>
           </div>
         </div>
       )}
