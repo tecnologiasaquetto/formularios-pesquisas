@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "migrate": "tsx scripts/migrate-to-supabase.ts",
-    "supabase:generate-types": "supabase gen types typescript --local > src/types/supabase.ts"
+    "supabase:generate-types": "supabase gen types typescript --local > src/types/supabase.ts",
+    "sync-users": "tsx sync-auth-users.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

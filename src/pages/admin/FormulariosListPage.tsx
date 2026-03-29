@@ -1,44 +1,23 @@
-import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { formularioService, statsService } from "@/services/supabase";
 import { Plus, Pencil, BarChart3, Copy, Trash2, Power, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { 
+  useFormularios, 
+  useToggleFormularioStatus, 
+  useDeleteFormulario, 
+  useDuplicateFormulario 
+} from "@/hooks/useFormularios";
 
 function FormulariosListPageInner() {
-  const [formularios, setFormularios] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
-
-  // Carregar formulários do Supabase
-  useEffect(() => {
-    const loadFormularios = async () => {
-      try {
-        const data = await formularioService.getAll();
-        
-        // Carregar contagem de respostas para cada formulário
-        const formsWithStats = await Promise.all(data.map(async (f) => {
-          try {
-            const stats = await statsService.getFormStats(f.id);
-            return { ...f, totalRespostas: stats.totalRespostas };
-          } catch (err) {
-            console.error(`Erro ao carregar stats para ${f.id}:`, err);
-            return { ...f, totalRespostas: 0 };
-          }
-        }));
-        
-        setFormularios(formsWithStats);
-      } catch (error) {
-        console.error('Erro ao carregar formulários:', error);
-        toast.error('Erro ao carregar formulários');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadFormularios();
-  }, []);
+  
+  // React Query hooks
+  const { data: formularios = [], isLoading } = useFormularios();
+  const toggleStatus = useToggleFormularioStatus();
+  const deleteFormulario = useDeleteFormulario();
+  const duplicateFormulario = useDuplicateFormulario();
 
   const handleCopyLink = (slug: string) => {
     const url = `${window.location.origin}/f/${slug}`;
@@ -81,41 +60,17 @@ function FormulariosListPageInner() {
     document.body.removeChild(textArea);
   };
 
-  const handleToggle = async (id: string) => {
-    try {
-      await formularioService.toggleStatus(id);
-      setFormularios(prev => 
-        prev.map(f => f.id === id ? { ...f, ativo: !f.ativo } : f)
-      );
-      toast.success(`Formulário ${id ? 'ativado' : 'desativado'} com sucesso!`);
-    } catch (error) {
-      console.error('Erro ao alterar status:', error);
-      toast.error('Erro ao alterar status do formulário');
-    }
+  const handleToggle = (id: string) => {
+    toggleStatus.mutate(id);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este formulário?')) return;
-    
-    try {
-      await formularioService.delete(id);
-      setFormularios(prev => prev.filter(f => f.id !== id));
-      toast.success('Formulário excluído com sucesso!');
-    } catch (error) {
-      console.error('Erro ao excluir formulário:', error);
-      toast.error('Erro ao excluir formulário');
-    }
+    deleteFormulario.mutate(id);
   };
 
-  const handleDuplicate = async (id: string) => {
-    try {
-      const newForm = await formularioService.duplicate(id);
-      setFormularios(prev => [newForm, ...prev]);
-      toast.success('Formulário duplicado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao duplicar formulário:', error);
-      toast.error('Erro ao duplicar formulário');
-    }
+  const handleDuplicate = (id: string) => {
+    duplicateFormulario.mutate(id);
   };
 
   return (

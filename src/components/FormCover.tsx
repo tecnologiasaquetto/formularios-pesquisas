@@ -73,11 +73,11 @@ export default function FormCover({ formulario, onStart }: FormCoverProps) {
             {/* Logo */}
             {formulario.logo_url && !imageError && (
               <div className="flex justify-center">
-                <div className="w-20 h-20 rounded-lg overflow-hidden bg-white shadow-md">
+                <div className="w-32 h-32 rounded-lg bg-white shadow-md p-3 flex items-center justify-center">
                   <img
                     src={formulario.logo_url}
                     alt="Logo da empresa"
-                    className="w-full h-full object-cover"
+                    className="max-w-full max-h-full object-contain"
                     onError={() => setImageError(true)}
                   />
                 </div>
@@ -119,9 +119,20 @@ export default function FormCover({ formulario, onStart }: FormCoverProps) {
             )}
 
             {/* Informações Adicionais */}
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Building2 className="w-4 h-4" />
-              <span>Pesquisa Confidencial • Anônima</span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Building2 className="w-4 h-4" />
+                <span>Pesquisa Confidencial • Anônima</span>
+              </div>
+              
+              {/* Explicação sobre Não se aplica */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left max-w-lg mx-auto">
+                <p className="text-sm text-blue-900 font-medium mb-2">💡 Dica importante:</p>
+                <p className="text-sm text-blue-800">
+                  Durante a pesquisa, você verá o botão <strong>"Não se aplica"</strong> em algumas perguntas. 
+                  Use-o quando a pergunta não for relevante para você ou quando não tiver como avaliar aquele item específico.
+                </p>
+              </div>
             </div>
 
             {/* Botão de Começar */}

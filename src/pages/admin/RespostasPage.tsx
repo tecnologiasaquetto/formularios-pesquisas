@@ -1,8 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { formularioService, perguntaService, respostaService, statsService, type MatrizStatItem } from "@/services/supabase";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
+import { useFormulario } from "@/hooks/useFormularios";
+import { 
+  useRespostas, 
+  usePerguntas, 
+  useRespostaItens, 
+  useMatrizItens, 
+  useNpsStats, 
+  useMatrizStats 
+} from "@/hooks/useRespostas";
+import type { MatrizStatItem } from "@/services/supabase";
 import { RefreshCw, Download, ExternalLink, Eye, Info, Search, Calendar, TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,16 +26,33 @@ export default function RespostasPage() {
   const { id } = useParams<{ id: string }>();
   const { setItemName, resetItemName } = useBreadcrumb();
 
-  const [formulario, setFormulario] = useState<any>(null);
-  const [perguntas, setPerguntas] = useState<any[]>([]);
-  const [matrizItens, setMatrizItens] = useState<any[]>([]);
-  const [respostas, setRespostas] = useState<any[]>([]);
-  const [respostaItens, setRespostaItens] = useState<any[]>([]);
-  const [npsStats, setNpsStats] = useState<any>(null);
-  const [matrizMedias, setMatrizMedias] = useState<Record<string, MatrizStatItem[]>>({});
+  // React Query hooks
+  const { data: formulario, isLoading: isLoadingForm } = useFormulario(id);
+  const { data: perguntas = [], isLoading: isLoadingPerguntas } = usePerguntas(id);
+  const { data: respostas = [], isLoading: isLoadingRespostas, refetch: refetchRespostas } = useRespostas(id);
+  const { data: npsStats, refetch: refetchNps } = useNpsStats(id);
+  const { data: matrizMedias = {}, refetch: refetchMatriz } = useMatrizStats(id);
+  
+  // Derived data
+  const matrizPerguntaIds = perguntas
+    .filter(p => p.tipo === 'matriz_nps')
+    .map(p => p.id);
+  const respostaIds = respostas.map(r => r.id);
+  
+  const { data: matrizItens = [] } = useMatrizItens(matrizPerguntaIds);
+  const { data: respostaItens = [] } = useRespostaItens(respostaIds);
+  
+  // Loading state combinado
+  const isLoading = isLoadingForm || isLoadingPerguntas || isLoadingRespostas;
+  
+  // Função para atualizar todos os dados
+  const loadData = () => {
+    refetchRespostas();
+    refetchNps();
+    refetchMatriz();
+  };
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos' | 'parecer' | 'calculos'>('dashboard');
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
 
   // Filters for Respostas tab
@@ -37,55 +62,13 @@ export default function RespostasPage() {
   const [sortField, setSortField] = useState<'criado_em' | 'respondente_nome'>('criado_em');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const loadData = async () => {
-    if (!id) return;
-    setIsLoading(true);
-    try {
-      const [formData, perguntasData, respostasData, npsData, matrizData] = await Promise.all([
-        formularioService.getById(id),
-        perguntaService.getByFormulario(id),
-        respostaService.getByFormulario(id),
-        statsService.getNpsStats(id).catch(() => null),
-        statsService.getMatrizStats(id).catch(() => ({}))
-      ]);
-
-      setFormulario(formData);
-      setPerguntas(perguntasData);
-      setRespostas(respostasData);
-      setNpsStats(npsData);
-      setMatrizMedias(matrizData as Record<string, MatrizStatItem[]>);
-      
-      if (formData?.nome) {
-        setItemName(formData.nome);
-      }
-
-      if (perguntasData.length > 0) {
-        const { data: mItens } = await supabase
-          .from('matriz_itens')
-          .select('*')
-          .in('pergunta_id', perguntasData.filter(p => p.tipo === 'matriz_nps').map(p => p.id));
-        setMatrizItens(mItens || []);
-      }
-
-      if (respostasData.length > 0) {
-        const { data: items } = await supabase
-          .from('resposta_itens')
-          .select('*')
-          .in('resposta_id', respostasData.map(r => r.id));
-        setRespostaItens(items || []);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar dados do formulário');
-    } finally {
-      setIsLoading(false);
+  // Atualizar breadcrumb quando formulário carregar
+  useEffect(() => {
+    if (formulario?.nome) {
+      setItemName(formulario.nome);
     }
-  };
-
-  useEffect(() => { 
-    loadData(); 
     return () => resetItemName();
-  }, [id]);
+  }, [formulario?.nome, setItemName, resetItemName]);
 
   // ─── Computed stats ──────────────────────────────────────────────────────────
 
@@ -289,7 +272,7 @@ export default function RespostasPage() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={loadData}
+            onClick={() => loadData()}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-muted transition-colors"
           >
             <RefreshCw className="h-4 w-4" /> Atualizar

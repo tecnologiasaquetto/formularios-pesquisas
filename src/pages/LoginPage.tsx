@@ -51,20 +51,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = (role: 'admin' | 'viewer') => {
-    const demoCredentials = {
-      admin: {
-        email: "admin@saquetto.com.br",
-        senha: "admin123"
-      },
-      viewer: {
-        email: "joao.silva@saquetto.com.br", 
-        senha: "joao123"
-      }
-    };
-
-    setCredentials(demoCredentials[role]);
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
@@ -160,39 +146,6 @@ export default function LoginPage() {
                 {isLoading ? "Entrando..." : "Entrar"}
               </Button>
             </form>
-
-            {/* Demo Accounts */}
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-sm text-gray-600 mb-3 text-center">
-                Contas de demonstração:
-              </p>
-              <div className="space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleDemoLogin('admin')}
-                >
-                  <div className="text-left">
-                    <div className="font-medium">Administrador</div>
-                    <div className="text-xs text-gray-500">admin@saquetto.com.br</div>
-                  </div>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleDemoLogin('viewer')}
-                >
-                  <div className="text-left">
-                    <div className="font-medium">Visualizador</div>
-                    <div className="text-xs text-gray-500">joao.silva@saquetto.com.br</div>
-                  </div>
-                </Button>
-              </div>
-            </div>
           </CardContent>
         </Card>
 

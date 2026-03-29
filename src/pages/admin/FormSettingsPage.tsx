@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formularioService } from "@/services/supabase";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
-import { ArrowLeft, Save, Upload, Palette, Calendar, Eye } from "lucide-react";
+import { ArrowLeft, Save, Palette, Calendar, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,13 +99,6 @@ export default function FormSettingsPage() {
     }
   };
 
-  const handleImageUpload = () => {
-    // Simulação de upload - na implementação real, faria upload para Supabase Storage
-    const mockUrl = "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=100&h=100&fit=crop&crop=center";
-    setFormData(prev => ({ ...prev, logo_url: mockUrl }));
-    toast.success("Logo carregado com sucesso! (Simulação)");
-  };
-
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -194,21 +187,33 @@ export default function FormSettingsPage() {
 
             {/* Logo */}
             <div>
-              <Label>Logo da Empresa</Label>
-              <div className="flex items-center gap-4 mt-2">
+              <Label htmlFor="logo_url">Logo da Empresa (URL)</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Cole a URL da imagem da logo
+              </p>
+              <div className="space-y-3">
+                <Input
+                  id="logo_url"
+                  type="url"
+                  placeholder="https://exemplo.com/logo.png"
+                  value={formData.logo_url || ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, logo_url: e.target.value }))}
+                />
                 {formData.logo_url && (
-                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
-                    <img
-                      src={formData.logo_url}
-                      alt="Logo"
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 border">
+                      <img
+                        src={formData.logo_url}
+                        alt="Logo preview"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%23999">?</text></svg>';
+                        }}
+                      />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Preview da logo</span>
                   </div>
                 )}
-                <Button type="button" variant="outline" onClick={handleImageUpload}>
-                  <Upload className="w-4 h-4 mr-2" />
-                  {formData.logo_url ? "Alterar Logo" : "Fazer Upload"}
-                </Button>
               </div>
             </div>
 

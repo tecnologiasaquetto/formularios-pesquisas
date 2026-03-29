@@ -20,7 +20,17 @@ import TestSupabaseConnection from "./test-supabase-connection";
 import TestSimpleConnection from "./test-simple-connection";
 import TestCorsFix from "./test-cors-fix";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutos - dados considerados frescos
+      gcTime: 1000 * 60 * 10, // 10 minutos - tempo no cache (antigo cacheTime)
+      refetchOnWindowFocus: false, // Não refetch ao focar janela
+      refetchOnReconnect: true, // Refetch ao reconectar
+      retry: 1, // Tentar 1 vez em caso de erro
+    },
+  },
+});
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>

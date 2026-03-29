@@ -328,7 +328,15 @@ function ActiveForm({ formulario }: { formulario: any }) {
         {/* Header */}
         <div className="mb-10 text-center">
           {formulario.logo_url && (
-            <img src={formulario.logo_url} alt="Logo" className="h-16 mx-auto mb-6" />
+            <div className="flex justify-center mb-6">
+              <div className="bg-white rounded-lg shadow-md p-3 max-w-[200px]">
+                <img 
+                  src={formulario.logo_url} 
+                  alt="Logo" 
+                  className="max-h-16 w-auto mx-auto object-contain" 
+                />
+              </div>
+            </div>
           )}
           <h1 className="text-3xl font-bold mb-3">{formulario.nome}</h1>
           {formulario.descricao && (
@@ -370,10 +378,10 @@ function ActiveForm({ formulario }: { formulario: any }) {
               return (
                 <div
                   key={p.id}
-                  className={`bg-card rounded-xl shadow-sm border border-border/50 overflow-hidden ${p.tipo === 'matriz_nps' ? 'p-0' : 'p-6'}`}
+                  className={`bg-card rounded-xl shadow-sm border border-border/50 ${p.tipo === 'matriz_nps' ? 'p-0' : ''}`}
                 >
-                  {/* Question title */}
-                  <div className={`${p.tipo === 'matriz_nps' ? 'px-6 pt-6 pb-4 border-b border-border/50 bg-muted/30' : 'mb-4'}`}>
+                  {/* Question title - Sticky no mobile */}
+                  <div className={`${p.tipo === 'matriz_nps' ? 'px-6 pt-6 pb-4 border-b border-border/50 bg-muted/30' : 'px-6 pt-6 pb-4'} md:static sticky top-0 z-20 bg-card shadow-lg md:shadow-none rounded-t-xl backdrop-blur-sm`}>
                     <p className="font-semibold text-base text-foreground">
                       {p.texto}
                       {p.obrigatorio && <span className="text-destructive ml-1">*</span>}
@@ -384,7 +392,7 @@ function ActiveForm({ formulario }: { formulario: any }) {
                   </div>
 
                   {/* Question body */}
-                  <div className={p.tipo === 'matriz_nps' ? 'px-6 pb-6 pt-2' : ''}>
+                  <div className={p.tipo === 'matriz_nps' ? 'px-6 pb-6 pt-2' : 'px-6 pb-6'}>
                     <QuestionRenderer
                       pergunta={p}
                       value={p.tipo === 'matriz_nps' ? matrizAnswers[p.id] : answers[p.id]}
