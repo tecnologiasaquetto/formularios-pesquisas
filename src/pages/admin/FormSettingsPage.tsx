@@ -83,6 +83,31 @@ export default function FormSettingsPage() {
     );
   }
 
+  // Helper functions for date handling with Brasilia timezone
+  const formatDateForInput = (isoString: string): string => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    // Convert UTC to Brasilia timezone (UTC-3)
+    const brasiliaOffset = -3 * 60; // -3 hours in minutes
+    const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+    const brasiliaTime = new Date(utcTime + (brasiliaOffset * 60000));
+    return brasiliaTime.toISOString().slice(0, 16);
+  };
+
+  const formatDateForDB = (inputString: string): string => {
+    if (!inputString) return "";
+    const date = new Date(inputString);
+    // Convert Brasilia local time to UTC
+    const brasiliaOffset = -3 * 60; // -3 hours in minutes
+    const brasiliaTime = date.getTime();
+    const utcTime = brasiliaTime - (brasiliaOffset * 60000);
+    return new Date(utcTime).toISOString();
+  };
+
+  const handleLogoUrlChange = (url: string) => {
+    setFormData(prev => ({ ...prev, logo_url: url }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id) return;
@@ -262,8 +287,8 @@ export default function FormSettingsPage() {
                 <Input
                   id="data_inicio"
                   type="datetime-local"
-                  value={formData.data_inicio ? new Date(formData.data_inicio).toISOString().slice(0, 16) : ""}
-                  onChange={(e) => setFormData(prev => ({ ...prev, data_inicio: e.target.value ? new Date(e.target.value).toISOString() : "" }))}
+                  value={formData.data_inicio ? formatDateForInput(formData.data_inicio) : ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, data_inicio: formatDateForDB(e.target.value) }))}
                 />
               </div>
               <div>
@@ -271,8 +296,8 @@ export default function FormSettingsPage() {
                 <Input
                   id="data_fim"
                   type="datetime-local"
-                  value={formData.data_fim ? new Date(formData.data_fim).toISOString().slice(0, 16) : ""}
-                  onChange={(e) => setFormData(prev => ({ ...prev, data_fim: e.target.value ? new Date(e.target.value).toISOString() : "" }))}
+                  value={formData.data_fim ? formatDateForInput(formData.data_fim) : ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, data_fim: formatDateForDB(e.target.value) }))}
                 />
               </div>
             </div>
