@@ -514,6 +514,10 @@ export interface MatrizStatItem {
   avaliacoes: number
   na: number
   scoreNps: number | null
+  promotores?: number
+  detratores?: number
+  percPromotores?: number
+  percDetratores?: number
 }
 
 // Statistics Services
@@ -596,10 +600,12 @@ export const statsService = {
           : 0
         const promotores = stats.notas.filter(n => n >= 9).length
         const detratores = stats.notas.filter(n => n <= 6).length
+        const percPromotores = totalValido > 0 ? Math.round((promotores / totalValido) * 100) : 0
+        const percDetratores = totalValido > 0 ? Math.round((detratores / totalValido) * 100) : 0
         const scoreNps = totalValido > 0 
-          ? Math.round((promotores / totalValido - detratores / totalValido) * 100)
+          ? percPromotores - percDetratores
           : null
-        return { linha, media, avaliacoes: totalValido, na: stats.naCount, scoreNps }
+        return { linha, media, avaliacoes: totalValido, na: stats.naCount, scoreNps, promotores, detratores, percPromotores, percDetratores }
       }).sort((a, b) => (b.scoreNps ?? -101) - (a.scoreNps ?? -101))
 
     const result: Record<string, MatrizStatItem[]> = {}

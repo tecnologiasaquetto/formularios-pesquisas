@@ -389,48 +389,89 @@ export default function RespostasPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-5">
-                  <div className="text-center">
-                    <p className={`text-5xl font-black ${npsColor(npsStats.score)}`}>{npsStats.score}</p>
-                    <p className={`text-xs font-medium mt-1 ${npsColor(npsStats.score)} uppercase tracking-wider`}>{npsLabel(npsStats.score)}</p>
-                    <div className="mt-4 bg-muted/50 p-2 rounded-lg border border-border/50">
-                      <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Memória de Cálculo:</p>
-                      <p className="text-[11px] font-black text-primary/80">
-                        {Math.round(npsStats.promotores / npsStats.total * 100)}% <span className="text-[9px] font-medium opacity-60">(Prom.)</span> 
-                        {' - '} 
-                        {Math.round(npsStats.detratores / npsStats.total * 100)}% <span className="text-[9px] font-medium opacity-60">(Detr.)</span>
-                        {' = '} 
-                        {npsStats.score}
-                      </p>
-                    </div>
+                <div className="space-y-6">
+                  {/* Headline Score */}
+                  <div className="flex flex-col items-center justify-center py-4 border-b border-border/50">
+                    <p className={`text-7xl font-black tracking-tighter ${npsColor(npsStats.score)}`}>{npsStats.score}</p>
+                    <p className={`text-sm font-bold mt-1 ${npsColor(npsStats.score)} uppercase tracking-[0.2em]`}>{npsLabel(npsStats.score)}</p>
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <div>
-                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                        <span>Promotores ({npsStats.promotores})</span>
-                        <span>{npsStats.total > 0 ? Math.round(npsStats.promotores / npsStats.total * 100) : 0}%</span>
+
+                  {/* Step-by-Step Memory */}
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                       <div className="w-1 h-3 bg-primary rounded-full" />
+                       Memória de Cálculo (Passo a Passo)
+                    </h4>
+
+                    {/* Step 1: Counts */}
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">1. Contagem de Votos</span>
+                        <span className="text-[10px] font-medium text-slate-400">Total: {npsStats.total}</span>
                       </div>
-                      <div className="bg-muted rounded-full h-2.5">
-                        <div className="bg-emerald-500 rounded-full h-2.5" style={{ width: `${npsStats.total > 0 ? npsStats.promotores / npsStats.total * 100 : 0}%` }} />
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white p-2 rounded-lg border border-emerald-100 text-center">
+                          <p className="text-xs font-black text-emerald-600">{npsStats.promotores}</p>
+                          <p className="text-[8px] text-emerald-500 uppercase font-bold">Promotores</p>
+                        </div>
+                        <div className="bg-white p-2 rounded-lg border border-amber-100 text-center">
+                          <p className="text-xs font-black text-amber-600">{npsStats.passivos}</p>
+                          <p className="text-[8px] text-amber-500 uppercase font-bold">Passivos</p>
+                        </div>
+                        <div className="bg-white p-2 rounded-lg border border-red-100 text-center">
+                          <p className="text-xs font-black text-red-600">{npsStats.detratores}</p>
+                          <p className="text-[8px] text-red-500 uppercase font-bold">Detratores</p>
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                        <span>Passivos ({npsStats.passivos})</span>
-                        <span>{npsStats.total > 0 ? Math.round(npsStats.passivos / npsStats.total * 100) : 0}%</span>
-                      </div>
-                      <div className="bg-muted rounded-full h-2.5">
-                        <div className="bg-amber-500 rounded-full h-2.5" style={{ width: `${npsStats.total > 0 ? npsStats.passivos / npsStats.total * 100 : 0}%` }} />
+
+                    {/* Step 2: Percentages */}
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">2. Conversão em Percentual</p>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px] font-bold">
+                            <span className="text-emerald-700">Promotores: ({npsStats.promotores} / {npsStats.total}) × 100</span>
+                            <span className="text-emerald-600">{Math.round(npsStats.promotores / npsStats.total * 100)}%</span>
+                          </div>
+                          <div className="h-1.5 bg-white border rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${npsStats.promotores / npsStats.total * 100}%` }} />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px] font-bold">
+                            <span className="text-red-700">Detratores: ({npsStats.detratores} / {npsStats.total}) × 100</span>
+                            <span className="text-red-600">{Math.round(npsStats.detratores / npsStats.total * 100)}%</span>
+                          </div>
+                          <div className="h-1.5 bg-white border rounded-full overflow-hidden">
+                            <div className="h-full bg-red-500 rounded-full" style={{ width: `${npsStats.detratores / npsStats.total * 100}%` }} />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                        <span>Detratores ({npsStats.detratores})</span>
-                        <span>{npsStats.total > 0 ? Math.round(npsStats.detratores / npsStats.total * 100) : 0}%</span>
+
+                    {/* Step 3: Final Formula */}
+                    <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                      <p className="text-[10px] font-bold text-primary/60 uppercase mb-2">3. Fórmula Final: % Prom. - % Detr.</p>
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="text-center">
+                          <p className="text-lg font-black text-emerald-600">{Math.round(npsStats.promotores / npsStats.total * 100)}%</p>
+                          <p className="text-[7px] text-slate-400 uppercase font-bold">Promotores</p>
+                        </div>
+                        <span className="text-slate-300 font-bold">−</span>
+                        <div className="text-center">
+                          <p className="text-lg font-black text-red-600">{Math.round(npsStats.detratores / npsStats.total * 100)}%</p>
+                          <p className="text-[7px] text-slate-400 uppercase font-bold">Detratores</p>
+                        </div>
+                        <span className="text-slate-300 font-bold">=</span>
+                        <div className="text-center px-3 py-1 bg-white rounded-lg border border-primary/20 shadow-sm">
+                          <p className={`text-xl font-black ${npsColor(npsStats.score)}`}>{npsStats.score}</p>
+                          <p className="text-[7px] text-slate-400 uppercase font-bold">Score NPS</p>
+                        </div>
                       </div>
-                      <div className="bg-muted rounded-full h-2.5">
-                        <div className="bg-destructive rounded-full h-2.5" style={{ width: `${npsStats.total > 0 ? npsStats.detratores / npsStats.total * 100 : 0}%` }} />
-                      </div>
+                      <p className="text-[9px] text-muted-foreground mt-3 italic">
+                        * Os <strong>Passivos ({npsStats.passivos})</strong> são considerados neutros e não entram na subtração final.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -533,8 +574,30 @@ export default function RespostasPage() {
                 {/* NPS Breakdown for Matrix or NPS Simples */}
                 {(p.tipo === 'matriz_nps' || p.tipo === 'nps_simples') && (
                   <div className="grid sm:grid-cols-2 gap-8 py-2">
-                    <div className="space-y-3">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase">Distribuição NPS</p>
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">Distribuição NPS</p>
+                        <div className="group relative">
+                          <span className="text-[10px] font-bold text-primary underline decoration-dotted cursor-help">Como foi calculado?</span>
+                          <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-popover border rounded-xl shadow-2xl z-50">
+                            <p className="text-[10px] font-bold border-b pb-1 mb-2">Memória de Cálculo (Questão):</p>
+                            <div className="space-y-2 text-[9px]">
+                              <div className="flex justify-between">
+                                <span className="text-emerald-600 font-bold">Promotores:</span>
+                                <span>{stats.promotores} ({Math.round(stats.promotores / Math.max(stats.totalScoreCount, 1) * 100)}%)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-red-500 font-bold">Detratores:</span>
+                                <span>{stats.detratores} ({Math.round(stats.detratores / Math.max(stats.totalScoreCount, 1) * 100)}%)</span>
+                              </div>
+                              <div className="pt-1 border-t flex justify-between font-black text-primary">
+                                <span>Score Final:</span>
+                                <span>{Math.round(stats.promotores / Math.max(stats.totalScoreCount, 1) * 100)}% - {Math.round(stats.detratores / Math.max(stats.totalScoreCount, 1) * 100)}% = {stats.score}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div className="space-y-4">
                         <div>
                           <div className="flex justify-between text-xs mb-1.5">
@@ -816,9 +879,31 @@ export default function RespostasPage() {
                               </td>
                               <td className="px-4 py-3 text-center">
                                 {m.scoreNps !== null ? (
-                                  <span className={`font-bold text-sm ${m.scoreNps >= 50 ? 'text-emerald-500' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-destructive'}`}>
-                                    {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
-                                  </span>
+                                  <div className="flex flex-col items-center group relative cursor-help">
+                                    <span className={`font-bold text-sm ${m.scoreNps >= 50 ? 'text-emerald-500' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-destructive'}`}>
+                                      {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
+                                    </span>
+                                    <span className="text-[8px] text-muted-foreground underline decoration-dotted">Ver cálculo</span>
+                                    
+                                    {/* Tooltip Memória de Cálculo */}
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-3 bg-popover border rounded-xl shadow-2xl z-50">
+                                      <p className="text-[9px] font-bold border-b pb-1 mb-2">Memória: {m.linha}</p>
+                                      <div className="space-y-1.5 text-[9px] text-left">
+                                        <div className="flex justify-between">
+                                          <span className="text-emerald-600">Promotores:</span>
+                                          <span className="font-bold">{m.promotores || 0}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-red-500">Detratores:</span>
+                                          <span className="font-bold">{m.detratores || 0}</span>
+                                        </div>
+                                        <div className="pt-1 border-t flex flex-col font-black text-primary text-center">
+                                          <span>{m.percPromotores || 0}% - {m.percDetratores || 0}%</span>
+                                          <span className="text-[10px]">= {m.scoreNps}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                 ) : <span className="text-muted-foreground">—</span>}
                               </td>
                               <td className="px-4 py-3">
@@ -1007,6 +1092,131 @@ export default function RespostasPage() {
                   </div>
                 </div>
               </section>
+
+              {/* ── Memória de Cálculo ────────────────────────────────────────────────── */}
+              <div className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100">
+                <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 mb-8 flex items-center gap-3">
+                  <div className="w-2 h-8 bg-primary rounded-sm" />
+                  Memória de Cálculo e Metodologia
+                </h2>
+
+                <div className="grid md:grid-cols-2 gap-10">
+                  {/* Visual Calculation Logic */}
+                  <div className="space-y-6">
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                      <h3 className="text-sm font-bold uppercase tracking-wider mb-4 text-slate-700 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                        Como chegamos à Nota Geral?
+                      </h3>
+                      <div className="space-y-4 text-xs leading-relaxed text-slate-600">
+                        <p className="font-medium">O cálculo do NPS (Net Promoter Score) segue 3 passos simples:</p>
+                        
+                        <div className="space-y-3">
+                          <div className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">1</span>
+                            <p><strong>Classificação:</strong> Cada voto de 0 a 10 é separado em 3 grupos (Detratores, Passivos e Promotores).</p>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">2</span>
+                            <p><strong>Percentual:</strong> Calculamos quanto cada grupo representa do total de votos.</p>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">3</span>
+                            <p><strong>Subtração:</strong> Pegamos o % de Promotores e tiramos o % de Detratores. O resultado é o seu Score.</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 bg-white p-5 rounded-xl border-2 border-primary/10 relative shadow-inner">
+                          <p className="text-[10px] font-black text-primary uppercase mb-2">Fórmula Aplicada:</p>
+                          <div className="flex items-center justify-center gap-4 text-xl font-black text-slate-800">
+                            <div className="text-center">
+                              <span className="text-emerald-600">{Math.round(npsStats.promotores / Math.max(npsStats.total, 1) * 100)}%</span>
+                              <span className="block text-[8px] text-slate-400 font-bold uppercase mt-1">Promotores</span>
+                            </div>
+                            <span className="text-slate-300 text-2xl">−</span>
+                            <div className="text-center">
+                              <span className="text-red-500">{Math.round(npsStats.detratores / Math.max(npsStats.total, 1) * 100)}%</span>
+                              <span className="block text-[8px] text-slate-400 font-bold uppercase mt-1">Detratores</span>
+                            </div>
+                            <span className="text-slate-300 text-2xl">=</span>
+                            <div className="text-center">
+                              <span className={npsColor(npsStats.score)}>{npsStats.score}</span>
+                              <span className="block text-[8px] text-slate-400 font-bold uppercase mt-1">Score Final</span>
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-center mt-4 text-slate-400 italic">
+                            Cálculo baseado no universo de <strong>{totalRespostas}</strong> respostas coletadas.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900 text-white p-6 rounded-2xl relative overflow-hidden shadow-lg">
+                      <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <TrendingUp className="h-20 w-20" />
+                      </div>
+                      <h3 className="text-xs font-bold uppercase tracking-widest mb-3 opacity-60">Entendendo o Resultado</h3>
+                      <p className="text-sm leading-relaxed mb-4">
+                        Um score de <strong>{npsStats.score}</strong> é classificado como <strong>{npsLabel(npsStats.score)}</strong>.
+                      </p>
+                      <div className="space-y-2 text-xs opacity-80">
+                        <p>• Acima de 75: Excelente (Fidelidade alta)</p>
+                        <p>• Acima de 50: Muito Bom (Qualidade alta)</p>
+                        <p>• Acima de 0: Razoável (Aperfeiçoamento)</p>
+                        <p>• Abaixo de 0: Crítico (Ação imediata)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Classification Table */}
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">O que significa cada nota?</h3>
+                    <div className="space-y-3">
+                      <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center gap-4 shadow-sm">
+                        <div className="text-2xl font-black text-emerald-600 w-14 text-center bg-white rounded-lg py-1 shadow-sm border border-emerald-100">9-10</div>
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-emerald-700 uppercase mb-0.5">Promotores</p>
+                          <p className="text-[10px] text-emerald-600/80 leading-tight">São seus fãs. Eles recomendam o serviço e trazem novos clientes organicamente.</p>
+                        </div>
+                      </div>
+                      <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex items-center gap-4 shadow-sm">
+                        <div className="text-2xl font-black text-amber-600 w-14 text-center bg-white rounded-lg py-1 shadow-sm border border-amber-100">7-8</div>
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-amber-700 uppercase mb-0.5">Passivos</p>
+                          <p className="text-[10px] text-amber-600/80 leading-tight">Estão satisfeitos, mas não são leais. Podem mudar por qualquer oferta de preço.</p>
+                        </div>
+                      </div>
+                      <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center gap-4 shadow-sm">
+                        <div className="text-2xl font-black text-red-600 w-14 text-center bg-white rounded-lg py-1 shadow-sm border border-red-100">0-6</div>
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-red-700 uppercase mb-0.5">Detratores</p>
+                          <p className="text-[10px] text-red-600/80 leading-tight">Clientes infelizes que podem criticar a marca e desmotivar outros clientes.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Distribuição das Notas (Contagem Real):</p>
+                      <div className="flex justify-between items-center text-[11px] font-bold px-2">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-emerald-600 text-lg">{npsStats.promotores}</span>
+                          <span className="text-slate-400 text-[8px] uppercase">Promotores</span>
+                        </div>
+                        <div className="w-px h-8 bg-slate-200" />
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-amber-600 text-lg">{npsStats.passivos}</span>
+                          <span className="text-slate-400 text-[8px] uppercase">Passivos</span>
+                        </div>
+                        <div className="w-px h-8 bg-slate-200" />
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-red-600 text-lg">{npsStats.detratores}</span>
+                          <span className="text-slate-400 text-[8px] uppercase">Detratores</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             {/* Page 2 - Methodology and Detailed Results */}
             <div className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100">
@@ -1112,7 +1322,7 @@ export default function RespostasPage() {
                             const cols: any[] = [];
                             perguntas.filter(p => !['secao'].includes(p.tipo)).forEach(p => {
                               if (p.tipo === 'matriz_nps') {
-                                const rows = p.opcoes?.linhas || [];
+                                const rows = (p.opcoes as any)?.rows || [];
                                 rows.forEach((row: string) => {
                                   cols.push({ id: `${p.id}-${row}`, isMatrix: true, parentId: p.id, parentText: p.texto, texto: row });
                                 });
@@ -1140,7 +1350,7 @@ export default function RespostasPage() {
                           const flattenedCols: any[] = [];
                           perguntas.filter(p => !['secao'].includes(p.tipo)).forEach(p => {
                             if (p.tipo === 'matriz_nps') {
-                              const rows = p.opcoes?.linhas || [];
+                                const rows = (p.opcoes as any)?.rows || [];
                               rows.forEach((row: string) => {
                                 flattenedCols.push({ idIdx: `${p.id}-${row}`, isMatrix: true, parentId: p.id, texto: row });
                               });
