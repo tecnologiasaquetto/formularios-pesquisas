@@ -23,7 +23,7 @@ import FormularioPreviewModal from "@/components/FormularioPreviewModal";
 import LivePreview from "@/components/LivePreview";
 
 const TIPOS = [
-  { tipo: 'matriz_nps' as const, label: 'Matriz NPS', icon: Grid3X3, config: { linhas: ["ADMINISTRATIVO", "AJUSTAGEM", "ALMOXARIFADO", "CALDERARIA", "COMERCIAL", "COMPRAS", "CONTROLE DE QUALIDADE", "CUSTOS", "DEPARTAMENTO PESSOAL", "EXPEDIÇÃO/LOGISTICA", "FINANCEIRO", "FISCAL/FATURAMENTO", "MANUTENÇÃO", "PCP", "PINTURA", "RH", "SEGURANÇA DO TRABALHO", "SGI", "TECNOLOGIA DA INFORMAÇÃO", "USINAGEM"], escala_min: 1, escala_max: 10, mostrar_na: true } },
+  { tipo: 'matriz_nps' as const, label: 'Matriz NPS', icon: Grid3X3, config: { linhas: ["ADMINISTRATIVO", "AJUSTAGEM", "ALMOXARIFADO", "CALDERARIA", "COMERCIAL", "COMPRAS", "CONTROLE DE QUALIDADE", "CUSTOS", "DEPARTAMENTO PESSOAL", "EXPEDIÇÃO/LOGISTICA", "FINANCEIRO", "FISCAL/FATURAMENTO", "MANUTENÇÃO", "PCP", "PINTURA", "RH", "SEGURANÇA DO TRABALHO", "SGI", "TECNOLOGIA DA INFORMAÇÃO", "USINAGEM"], escala_min: 0, escala_max: 10, mostrar_na: true } },
   { tipo: 'nps_simples' as const, label: 'NPS Simples', icon: Gauge, config: { escala_min: 0, escala_max: 10, label_min: 'De jeito nenhum', label_max: 'Com certeza!' } },
   { tipo: 'radio' as const, label: 'Múltipla escolha', icon: CircleDot, config: { opcoes: ['Opção 1', 'Opção 2', 'Opção 3'] } },
   { tipo: 'checkbox' as const, label: 'Caixas de seleção', icon: CheckSquare, config: { opcoes: ['Opção 1', 'Opção 2', 'Opção 3'] } },
