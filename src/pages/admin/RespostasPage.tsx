@@ -913,8 +913,16 @@ export default function RespostasPage() {
                                           <span className="font-bold">{m.promotores || 0}</span>
                                         </div>
                                         <div className="flex justify-between">
+                                          <span className="text-amber-500">Passivos:</span>
+                                          <span className="font-bold">{m.avaliacoes - (m.promotores || 0) - (m.detratores || 0)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
                                           <span className="text-red-500">Detratores:</span>
                                           <span className="font-bold">{m.detratores || 0}</span>
+                                        </div>
+                                        <div className="flex justify-between border-t border-dashed border-border pt-1 mt-1 mb-1">
+                                          <span className="text-muted-foreground">Total Válidos:</span>
+                                          <span className="font-bold">{m.avaliacoes}</span>
                                         </div>
                                         <div className="pt-1 border-t flex flex-col font-black text-primary text-center">
                                           <span>{m.percPromotores || 0}% - {m.percDetratores || 0}%</span>
@@ -1063,12 +1071,13 @@ export default function RespostasPage() {
                               {/* Mini Memória de Cálculo */}
                               {m.scoreNps !== null && (
                                 <div className="pt-2 border-t border-slate-100">
-                                  <div className="flex gap-2 text-[8px] font-bold">
+                                  <div className="flex gap-1.5 text-[8px] font-bold items-center flex-wrap">
                                     <span className="text-emerald-600">{m.percPromotores || 0}% Prom.</span>
                                     <span className="text-slate-300">−</span>
                                     <span className="text-red-500">{m.percDetratores || 0}% Detr.</span>
                                     <span className="text-slate-300">=</span>
                                     <span className={m.scoreNps >= 50 ? 'text-emerald-600' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-red-500'}>{m.scoreNps}</span>
+                                    <span className="text-amber-500/70 ml-1 font-medium bg-amber-50 px-1 rounded">(& {m.avaliacoes > 0 ? Math.round(((m.avaliacoes - (m.promotores||0) - (m.detratores||0)) / m.avaliacoes) * 100) : 0}% Passivos)</span>
                                   </div>
                                   <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
                                     <div className="bg-emerald-500 h-full" style={{ width: `${m.percPromotores || 0}%` }} />
@@ -1113,12 +1122,13 @@ export default function RespostasPage() {
                               {/* Mini Memória de Cálculo */}
                               {m.scoreNps !== null && (
                                 <div className="pt-2 border-t border-slate-100">
-                                  <div className="flex gap-2 text-[8px] font-bold">
+                                  <div className="flex gap-1.5 text-[8px] font-bold items-center flex-wrap">
                                     <span className="text-emerald-600">{m.percPromotores || 0}% Prom.</span>
                                     <span className="text-slate-300">−</span>
                                     <span className="text-red-500">{m.percDetratores || 0}% Detr.</span>
                                     <span className="text-slate-300">=</span>
                                     <span className={m.scoreNps >= 50 ? 'text-emerald-600' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-red-500'}>{m.scoreNps}</span>
+                                    <span className="text-amber-500/70 ml-1 font-medium bg-amber-50 px-1 rounded">(& {m.avaliacoes > 0 ? Math.round(((m.avaliacoes - (m.promotores||0) - (m.detratores||0)) / m.avaliacoes) * 100) : 0}% Passivos)</span>
                                   </div>
                                   <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
                                     <div className="bg-emerald-500 h-full" style={{ width: `${m.percPromotores || 0}%` }} />
