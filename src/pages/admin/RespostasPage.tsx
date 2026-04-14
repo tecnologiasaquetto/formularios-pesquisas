@@ -653,6 +653,24 @@ export default function RespostasPage() {
                           );
                         })}
                       </div>
+                      
+                      {/* Legenda Explicativa */}
+                      <div className="mt-2 p-2.5 bg-muted/20 border rounded-lg text-[10px] text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+                        <span className="font-semibold text-foreground">Legenda:</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          <span><strong className="text-emerald-700 dark:text-emerald-400">Nº Superior:</strong> Nota recebida</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-foreground/60"></span>
+                          <span><strong className="text-foreground">Nº Central:</strong> Qtd. de Votos</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 mt-0.5 sm:mt-0">
+                          <span className="w-3 h-1 rounded-full bg-muted-foreground/40"></span>
+                          <span><strong className="text-foreground">Barra:</strong> Volume % do Total</span>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
                 )}
