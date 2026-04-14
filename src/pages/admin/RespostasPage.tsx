@@ -1019,17 +1019,46 @@ export default function RespostasPage() {
                         <p className="text-[11px] font-bold text-emerald-600 uppercase flex items-center gap-1.5">
                           <TrendingUp className="h-4 w-4" /> Melhores Desempenhos (Top 3)
                         </p>
-                        <div className="bg-emerald-50/40 rounded-2xl border border-emerald-100/50 p-5 space-y-4">
+                        <div className="bg-emerald-50/40 rounded-2xl border border-emerald-100/50 p-4 space-y-4">
                           {stats.slice(0, 3).map((m, i) => (
-                            <div key={i} className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-3">
-                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">{i+1}º</span>
-                                <span className="font-semibold text-slate-700">{m.linha}</span>
+                            <div key={i} className="bg-white rounded-xl p-3 border border-emerald-100 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">{i+1}º</span>
+                                  <span className="font-semibold text-slate-700 text-xs">{m.linha}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-right">
+                                    <span className="font-black text-emerald-600 text-sm block">{m.media.toFixed(1)}</span>
+                                    <span className="text-[8px] text-slate-400 uppercase">Média</span>
+                                  </div>
+                                  {m.scoreNps !== null && (
+                                    <div className="text-right">
+                                      <span className={`font-black text-sm block ${m.scoreNps >= 50 ? 'text-emerald-600' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-red-500'}`}>
+                                        {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
+                                      </span>
+                                      <span className="text-[8px] text-slate-400 uppercase">NPS</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="font-bold text-emerald-600 block">{m.media.toFixed(1)}</span>
-                                <span className="text-[9px] text-slate-400 uppercase font-bold">Média</span>
-                              </div>
+                              {/* Mini Memória de Cálculo */}
+                              {m.scoreNps !== null && (
+                                <div className="pt-2 border-t border-slate-100">
+                                  <div className="flex gap-2 text-[8px] font-bold">
+                                    <span className="text-emerald-600">{m.percPromotores || 0}% Prom.</span>
+                                    <span className="text-slate-300">−</span>
+                                    <span className="text-red-500">{m.percDetratores || 0}% Detr.</span>
+                                    <span className="text-slate-300">=</span>
+                                    <span className={m.scoreNps >= 50 ? 'text-emerald-600' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-red-500'}>{m.scoreNps}</span>
+                                  </div>
+                                  <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                    <div className="bg-emerald-500 h-full" style={{ width: `${m.percPromotores || 0}%` }} />
+                                    <div className="bg-amber-400 h-full" style={{ width: `${m.avaliacoes > 0 ? Math.round(((m.avaliacoes - (m.promotores||0) - (m.detratores||0)) / m.avaliacoes) * 100) : 0}%` }} />
+                                    <div className="bg-red-500 h-full" style={{ width: `${m.percDetratores || 0}%` }} />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1040,17 +1069,46 @@ export default function RespostasPage() {
                         <p className="text-[11px] font-bold text-red-600 uppercase flex items-center gap-1.5">
                           <TrendingDown className="h-4 w-4" /> Pontos de Atenção (Gargalos)
                         </p>
-                        <div className="bg-red-50/40 rounded-2xl border border-red-100/50 p-5 space-y-4">
+                        <div className="bg-red-50/40 rounded-2xl border border-red-100/50 p-4 space-y-4">
                           {stats.slice(-3).reverse().map((m, i) => (
-                            <div key={i} className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-3">
-                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700 text-[10px] font-black">{i+1}º</span>
-                                <span className="font-semibold text-slate-700">{m.linha}</span>
+                            <div key={i} className="bg-white rounded-xl p-3 border border-red-100 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700 text-[10px] font-black">{i+1}º</span>
+                                  <span className="font-semibold text-slate-700 text-xs">{m.linha}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-right">
+                                    <span className="font-black text-red-600 text-sm block">{m.media.toFixed(1)}</span>
+                                    <span className="text-[8px] text-slate-400 uppercase">Média</span>
+                                  </div>
+                                  {m.scoreNps !== null && (
+                                    <div className="text-right">
+                                      <span className={`font-black text-sm block ${m.scoreNps >= 50 ? 'text-emerald-600' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-red-500'}`}>
+                                        {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
+                                      </span>
+                                      <span className="text-[8px] text-slate-400 uppercase">NPS</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="font-bold text-red-600 block">{m.media.toFixed(1)}</span>
-                                <span className="text-[9px] text-slate-400 uppercase font-bold">Média</span>
-                              </div>
+                              {/* Mini Memória de Cálculo */}
+                              {m.scoreNps !== null && (
+                                <div className="pt-2 border-t border-slate-100">
+                                  <div className="flex gap-2 text-[8px] font-bold">
+                                    <span className="text-emerald-600">{m.percPromotores || 0}% Prom.</span>
+                                    <span className="text-slate-300">−</span>
+                                    <span className="text-red-500">{m.percDetratores || 0}% Detr.</span>
+                                    <span className="text-slate-300">=</span>
+                                    <span className={m.scoreNps >= 50 ? 'text-emerald-600' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-red-500'}>{m.scoreNps}</span>
+                                  </div>
+                                  <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                    <div className="bg-emerald-500 h-full" style={{ width: `${m.percPromotores || 0}%` }} />
+                                    <div className="bg-amber-400 h-full" style={{ width: `${m.avaliacoes > 0 ? Math.round(((m.avaliacoes - (m.promotores||0) - (m.detratores||0)) / m.avaliacoes) * 100) : 0}%` }} />
+                                    <div className="bg-red-500 h-full" style={{ width: `${m.percDetratores || 0}%` }} />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1266,36 +1324,72 @@ export default function RespostasPage() {
 
                 {/* Question Breakdown */}
                 <div className="space-y-6">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600">Resultados por Indicador</h3>
-                  <div className="space-y-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600">Resultados por Indicador — Memória de Cálculo</h3>
+                  <div className="space-y-5">
                     {perguntas.filter(p => !['secao'].includes(p.tipo)).map(p => {
                       const stats = getPerguntaStats(p.id);
                       if (stats.total === 0) return null;
+                      const percProm = stats.totalScoreCount > 0 ? Math.round(stats.promotores / stats.totalScoreCount * 100) : 0;
+                      const percPass = stats.totalScoreCount > 0 ? Math.round(stats.passivos / stats.totalScoreCount * 100) : 0;
+                      const percDetr = stats.totalScoreCount > 0 ? Math.round(stats.detratores / stats.totalScoreCount * 100) : 0;
                       
                       return (
-                        <div key={p.id} className="border-b border-slate-100 pb-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-[10px] font-black text-slate-700 leading-tight flex items-center gap-1" title={p.texto}>
-                              {p.tipo === 'matriz_nps' ? <span className="text-primary mr-1">[MATRIZ]</span> : null}
+                        <div key={p.id} className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
+                          {/* Header */}
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-[10px] font-black text-slate-700 leading-tight flex-1" title={p.texto}>
+                              {p.tipo === 'matriz_nps' && <span className="inline-block bg-primary/10 text-primary rounded px-1 py-0.5 text-[8px] font-bold mr-1">MATRIZ</span>}
                               {p.texto}
-                              <span className="text-[10px] opacity-40 font-normal" title="Pontuação NPS Individual desta pergunta">(?)</span>
                             </p>
-                            <span className="text-[8px] text-slate-400 italic">
-                              {stats.totalScoreCount} {p.tipo === 'matriz_nps' ? 'avaliações' : 'respostas'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
-                              <div className="bg-emerald-500 h-full border-r border-white/20" style={{ width: `${stats.totalScoreCount > 0 ? (stats.promotores / stats.totalScoreCount * 100) : 0}%` }} />
-                              <div className="bg-amber-400 h-full border-r border-white/20" style={{ width: `${stats.totalScoreCount > 0 ? (stats.passivos / stats.totalScoreCount * 100) : 0}%` }} />
-                              <div className="bg-red-500 h-full" style={{ width: `${stats.totalScoreCount > 0 ? (stats.detratores / stats.totalScoreCount * 100) : 0}%` }} />
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[8px] text-slate-400">{stats.totalScoreCount} resp.</span>
+                              <span className={`text-sm font-black px-2 py-0.5 rounded-lg border ${stats.score >= 50 ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : stats.score >= 0 ? 'text-amber-600 border-amber-200 bg-amber-50' : 'text-red-600 border-red-200 bg-red-50'}`}>
+                                {stats.score > 0 ? '+' : ''}{stats.score}
+                              </span>
                             </div>
-                            <span className={`text-xs font-black min-w-[30px] rounded px-1.5 py-0.5 ${npsColor(stats.score)} bg-slate-50 border`}>{stats.score}</span>
                           </div>
-                          <div className="flex justify-between text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
-                            <span>{stats.promotores} Prom.</span>
-                            <span>{stats.passivos} Pass.</span>
-                            <span>{stats.detratores} Detr.</span>
+
+                          {/* Step 1: Stacked bar */}
+                          <div>
+                            <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                              <div className="bg-emerald-500 h-full flex items-center justify-center" style={{ width: `${percProm}%` }}>
+                                {percProm >= 15 && <span className="text-[7px] font-bold text-white">{percProm}%</span>}
+                              </div>
+                              <div className="bg-amber-400 h-full flex items-center justify-center" style={{ width: `${percPass}%` }}>
+                                {percPass >= 15 && <span className="text-[7px] font-bold text-white">{percPass}%</span>}
+                              </div>
+                              <div className="bg-red-500 h-full flex items-center justify-center" style={{ width: `${percDetr}%` }}>
+                                {percDetr >= 15 && <span className="text-[7px] font-bold text-white">{percDetr}%</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Step 2: Group legend with counts */}
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="bg-emerald-50 rounded-lg p-2">
+                              <span className="text-emerald-600 font-black text-xs block">{stats.promotores}</span>
+                              <span className="text-[8px] text-emerald-600 font-bold uppercase">Prom. ({percProm}%)</span>
+                            </div>
+                            <div className="bg-amber-50 rounded-lg p-2">
+                              <span className="text-amber-600 font-black text-xs block">{stats.passivos}</span>
+                              <span className="text-[8px] text-amber-600 font-bold uppercase">Pass. ({percPass}%)</span>
+                            </div>
+                            <div className="bg-red-50 rounded-lg p-2">
+                              <span className="text-red-600 font-black text-xs block">{stats.detratores}</span>
+                              <span className="text-[8px] text-red-600 font-bold uppercase">Detr. ({percDetr}%)</span>
+                            </div>
+                          </div>
+
+                          {/* Step 3: Formula */}
+                          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 flex items-center justify-center gap-3 text-xs font-black">
+                            <span className="text-emerald-600">{percProm}%</span>
+                            <span className="text-slate-300">−</span>
+                            <span className="text-red-500">{percDetr}%</span>
+                            <span className="text-slate-300">=</span>
+                            <span className={stats.score >= 50 ? 'text-emerald-600' : stats.score >= 0 ? 'text-amber-600' : 'text-red-600'}>
+                              {stats.score > 0 ? '+' : ''}{stats.score}
+                            </span>
+                            <span className="text-[8px] font-normal text-slate-400 ml-1">(Score NPS)</span>
                           </div>
                         </div>
                       );
