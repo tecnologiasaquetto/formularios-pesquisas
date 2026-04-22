@@ -524,10 +524,48 @@ export interface MatrizStatItem {
 export const statsService = {
   async getNpsStats(formularioId: string) {
     const { data, error } = await supabase
-      .rpc('calc_nps_stats', { p_formulario_id: formularioId })
-    
+      .from('resposta_itens')
+      .select('valor, perguntas!inner(tipo, formulario_id)')
+      .eq('perguntas.formulario_id', formularioId)
+      .in('perguntas.tipo', ['nps_simples', 'matriz_nps'])
+
     if (error) throw error
-    return data as any
+
+    let promotores = 0
+    let passivos = 0
+    let detratores = 0
+    let total = 0
+
+    ;(data as any[]).forEach((item: any) => {
+      if (!item?.valor) return
+
+      let nota: number | null = null
+
+      if (item.valor === 'NA') return
+
+      try {
+        const parsed = JSON.parse(item.valor)
+        if (parsed && typeof parsed === 'object' && ('nota' in parsed || 'linha' in parsed)) {
+          if (parsed.is_na) return
+          nota = Number(parsed.nota)
+        }
+      } catch {
+        if (/^[0-9]+$/.test(String(item.valor))) {
+          nota = Number(item.valor)
+        }
+      }
+
+      if (nota === null || Number.isNaN(nota)) return
+
+      total++
+      if (nota >= 9) promotores++
+      else if (nota >= 7) passivos++
+      else detratores++
+    })
+
+    const score = total > 0 ? Math.round(((promotores / total) - (detratores / total)) * 100) : 0
+
+    return { score, promotores, passivos, detratores, total } as any
   },
 
   async getFormStats(formularioId: string) {
