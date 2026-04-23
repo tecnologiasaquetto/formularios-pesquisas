@@ -1583,8 +1583,7 @@ export default function RespostasPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </section>
             {/* Page 2 - Methodology and Detailed Results */}
             <section className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100 print:pt-8 is-report-block">
               <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 mb-8 flex items-center gap-3">
@@ -1699,11 +1698,13 @@ export default function RespostasPage() {
                             </span>
                             <span className="text-[8px] font-normal text-slate-400 ml-1">(Score NPS)</span>
                           </div>
-                        </section>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
+              </div>
+            </section>
 
                 {/* Qualitative Responses (Direct Answers Table) */}
               <section className="mt-12 pt-12 border-t border-slate-100 print:break-before-page print:pt-8 is-report-block">
@@ -1819,7 +1820,6 @@ export default function RespostasPage() {
                   </div>
                 </div>
               </section>
-            </div>
             
             <p className="text-center text-[10px] text-slate-400 mt-12">
               © {new Date().getFullYear()} - Sistema de Gestão de Pesquisas e Satisfação
