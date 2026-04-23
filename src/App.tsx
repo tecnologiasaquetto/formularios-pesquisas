@@ -23,11 +23,11 @@ import TestCorsFix from "./test-cors-fix";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 30, // 30 segundos - dados considerados frescos
-      gcTime: 1000 * 60 * 5, // 5 minutos - tempo no cache (antigo cacheTime)
-      refetchOnWindowFocus: true, // Refetch ao focar janela para garantir dados novos
-      refetchOnReconnect: true, // Refetch ao reconectar
-      retry: 1, // Tentar 1 vez em caso de erro
+      staleTime: 1000 * 60 * 5,  // 5 minutos - dados considerados frescos
+      gcTime: 1000 * 60 * 10,    // 10 minutos - tempo no cache
+      refetchOnWindowFocus: false, // Não refetch ao focar janela (evita recargas desnecessárias)
+      refetchOnReconnect: true,   // Refetch ao reconectar (internet caiu e voltou)
+      retry: 1,                   // Tentar 1 vez em caso de erro
     },
   },
 });

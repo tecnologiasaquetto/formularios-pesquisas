@@ -23,6 +23,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { utils, writeFile } from "xlsx";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -58,6 +59,89 @@ export default function RespostasPage() {
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'respostas' | 'departamentos' | 'parecer' | 'calculos' | 'divulgacao'>('dashboard');
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  // PDF Generation Function
+  const handleDownloadPDF = async (elementId: string, filename: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    setIsGeneratingPDF(true);
+    document.body.classList.add('pdf-mode');
+    const toastId = toast.loading("Gerando documento de alta fidelidade...");
+    
+    try {
+      // Delay maior para garantir que todas as animações terminaram e os gráficos estão 100% visíveis
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const contentWidth = pdfWidth - (2 * margin);
+      
+      // Capturamos cabeçalho, seções e blocos identificados
+      const blocks = Array.from(element.querySelectorAll('.report-header, section, .is-report-block, .report-footer'));
+      
+      let currentY = margin;
+
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i] as HTMLElement;
+        
+        // Verificamos se o bloco está visível antes de capturar
+        const style = window.getComputedStyle(block);
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+
+        const canvas = await html2canvas(block, {
+          scale: 2, // 2x é suficiente e evita problemas de memória em relatórios longos
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          windowWidth: 1200,
+          onclone: (clonedDoc) => {
+            // Garantimos que no clone nada tenha opacidade ou animação
+            const clonedElements = clonedDoc.getElementsByClassName('animate-in');
+            for (let el of Array.from(clonedElements)) {
+              el.classList.remove('animate-in', 'fade-in', 'duration-500');
+              (el as HTMLElement).style.opacity = '1';
+            }
+          }
+        });
+
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+
+        // Se o bloco for maior que uma página inteira, precisamos tratar (raro para seções, comum para tabelas gigantes)
+        if (imgHeight > (pdfHeight - 2 * margin)) {
+           // Se for muito grande, adiciona em uma nova página e tenta ocupar o máximo
+           if (currentY > margin) {
+             pdf.addPage();
+             currentY = margin;
+           }
+           const scaleFactor = (pdfHeight - 2 * margin) / imgHeight;
+           pdf.addImage(imgData, 'PNG', margin, currentY, contentWidth, imgHeight * scaleFactor, undefined, 'FAST');
+           currentY = pdfHeight; // Força nova página para o próximo bloco
+        } else {
+          if (currentY + imgHeight > pdfHeight - margin) {
+            pdf.addPage();
+            currentY = margin;
+          }
+          pdf.addImage(imgData, 'PNG', margin, currentY, contentWidth, imgHeight, undefined, 'FAST');
+          currentY += imgHeight + 5;
+        }
+      }
+      
+      pdf.save(`${filename}.pdf`);
+      toast.success("Download concluído!", { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error("Houve um erro na geração do PDF.", { id: toastId });
+    } finally {
+      document.body.classList.remove('pdf-mode');
+      setIsGeneratingPDF(false);
+    }
+  };
 
   // Filters for Respostas tab
   const [searchText, setSearchText] = useState("");
@@ -223,6 +307,101 @@ export default function RespostasPage() {
     toast.success('CSV exportado com sucesso!');
   };
 
+  // Export Excel
+  const handleExportExcel = () => {
+    try {
+      const wb = utils.book_new();
+
+      // 1. Sheet Resumo
+      const resumoData = [
+        ['Resumo do Relatório - ' + (formulario?.nome || '')],
+        [''],
+        ['KPI', 'Valor', 'Descrição'],
+        ['Total de Respostas', totalRespostas, 'Volume total de participações'],
+        ['NPS Geral', npsStats?.score || 0, npsLabel(npsStats?.score || 0)],
+        ['Taxa de Conclusão', `${taxaConclusao}%`, 'Percentual de formulários finalizados'],
+        [''],
+        ['Distribuição NPS', 'Quantidade', 'Percentual'],
+        ['Promotores (9-10)', npsStats?.promotores || 0, npsStats?.total ? Math.round((npsStats.promotores / npsStats.total) * 100) + '%' : '0%'],
+        ['Passivos (7-8)', npsStats?.passivos || 0, npsStats?.total ? Math.round((npsStats.passivos / npsStats.total) * 100) + '%' : '0%'],
+        ['Detratores (0-6)', npsStats?.detratores || 0, npsStats?.total ? Math.round((npsStats.detratores / npsStats.total) * 100) + '%' : '0%'],
+      ];
+      const wsResumo = utils.aoa_to_sheet(resumoData);
+      utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+      // 2. Sheet Ranking por Depto (if matrix exists)
+      if (hasMatriz) {
+        const rankingData = [['Pergunta', 'Departamento', 'Média', 'Score NPS', 'Avaliações', 'N/A']];
+        matrizPerguntas.forEach(p => {
+          const stats = matrizMedias[p.id] || [];
+          stats.forEach(m => {
+            rankingData.push([
+              p.texto,
+              m.linha,
+              m.media,
+              m.scoreNps || 0,
+              m.avaliacoes,
+              m.na
+            ]);
+          });
+        });
+        const wsRanking = utils.aoa_to_sheet(rankingData);
+        utils.book_append_sheet(wb, wsRanking, "Ranking por Depto");
+      }
+
+      // 3. Sheet Dados por Pergunta
+      const perguntasData = [['ID', 'Pergunta', 'Tipo', 'Total Respostas', 'Score NPS', 'Promotores', 'Passivos', 'Detratores']];
+      perguntas.filter(p => !['secao'].includes(p.tipo)).forEach(p => {
+        const stats = getPerguntaStats(p.id);
+        perguntasData.push([
+          p.id,
+          p.texto,
+          p.tipo,
+          stats.totalScoreCount,
+          (p.tipo === 'matriz_nps' || p.tipo === 'nps_simples') ? stats.score : 'N/A',
+          stats.promotores,
+          stats.passivos,
+          stats.detratores
+        ]);
+      });
+      const wsPerguntas = utils.aoa_to_sheet(perguntasData);
+      utils.book_append_sheet(wb, wsPerguntas, "Dados por Pergunta");
+
+      // 4. Sheet Respostas Brutas
+      const headers = ['#', 'Data', 'Respondente', 'E-mail', 'Departamento',
+        ...perguntas.filter(p => p.tipo !== 'secao').map(p => p.texto)];
+      const rows = filteredRespostas.map((r, i) => {
+        const base = [
+          i + 1,
+          new Date(r.criado_em).toLocaleString('pt-BR'),
+          r.respondente_nome || 'Anônimo',
+          r.respondente_email || '',
+          r.respondente_departamento || ''
+        ];
+        const answers = perguntas.filter(p => p.tipo !== 'secao').map(p => {
+          const items = respostaItens.filter(ri => ri.resposta_id === r.id && ri.pergunta_id === p.id);
+          return items.map(ri => {
+            try {
+              const parsed = JSON.parse(ri.valor);
+              if (parsed && 'linha' in parsed) return `${parsed.linha}: ${parsed.is_na ? 'N/A' : parsed.nota}`;
+            } catch {}
+            return ri.valor || '';
+          }).join(' | ');
+        });
+        return [...base, ...answers];
+      });
+      const wsRespostas = utils.aoa_to_sheet([headers, ...rows]);
+      utils.book_append_sheet(wb, wsRespostas, "Respostas Brutas");
+
+      // Export
+      writeFile(wb, `${formulario?.slug || 'relatorio'}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success('Relatório Excel exportado com sucesso!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao exportar Excel');
+    }
+  };
+
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('desc'); }
@@ -264,6 +443,81 @@ export default function RespostasPage() {
 
   return (
     <div className="space-y-6">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print, screen {
+          .is-report-container {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            background: white !important;
+            color: #1e293b !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+          }
+          .pdf-mode .is-report-container {
+            color: #000000 !important;
+            animation: none !important;
+            transition: none !important;
+          }
+          .pdf-mode .text-slate-500, .pdf-mode .text-slate-400, .pdf-mode .text-muted-foreground {
+            color: #1e293b !important;
+            opacity: 1 !important;
+          }
+          .pdf-mode .bg-slate-50, .pdf-mode .bg-muted/50 {
+            background-color: #f1f5f9 !important;
+          }
+          .pdf-mode h1, .pdf-mode h2, .pdf-mode h3 {
+            color: #000000 !important;
+            font-weight: 900 !important;
+          }
+          .pdf-mode * {
+            animation: none !important;
+            transition: none !important;
+            opacity: 1 !important;
+            border-color: #cbd5e1 !important;
+          }
+        }
+        @media print {
+          @page { margin: 1cm; size: a4; }
+          html, body { 
+            height: auto !important; 
+            overflow: visible !important; 
+            background: white !important;
+          }
+          .is-report-container {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .flex:not(.print-flex), .grid:not(.print-grid) { 
+            display: block !important; 
+          }
+          .print-flex { display: flex !important; }
+          .print-grid { display: grid !important; }
+          
+          .overflow-hidden, .overflow-auto, .overflow-y-auto { 
+            overflow: visible !important; 
+            max-height: none !important;
+          }
+          .print\\:break-before-page { 
+            page-break-before: always !important; 
+            break-before: page !important; 
+            display: block !important;
+            clear: both !important;
+          }
+          .print\\:break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
+          .print\\:hidden, aside, nav, footer, button, .tabs-container, header:not(.print-header) { display: none !important; }
+          
+          /* Colors preservation */
+          .text-emerald-600 { color: #059669 !important; }
+          .text-amber-500 { color: #f59e0b !important; }
+          .text-red-600, .text-destructive { color: #dc2626 !important; }
+          .bg-primary { background-color: #3b82f6 !important; -webkit-print-color-adjust: exact; }
+          .bg-slate-900 { background-color: #0f172a !important; -webkit-print-color-adjust: exact; }
+          .bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
+        }
+      `}} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1 min-w-0">
@@ -289,10 +543,10 @@ export default function RespostasPage() {
             <ExternalLink className="h-4 w-4" /> Ver pesquisa
           </Link>
           <button
-            onClick={handleExportCSV}
+            onClick={handleExportExcel}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            <Download className="h-4 w-4" /> Exportar CSV
+            <Download className="h-4 w-4" /> Exportar Relatório Excel
           </button>
         </div>
       </div>
@@ -311,7 +565,7 @@ export default function RespostasPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b gap-1 print:hidden overflow-x-auto">
+      <div className="flex border-b gap-1 print:hidden overflow-x-auto tabs-container">
         <TabButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>Dashboard</TabButton>
         <TabButton active={activeTab === 'respostas'} onClick={() => setActiveTab('respostas')}>Respostas ({totalRespostas})</TabButton>
         {hasMatriz && (
@@ -857,21 +1111,46 @@ export default function RespostasPage() {
 
       {/* ── Departamentos Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'departamentos' && hasMatriz && (
-        <div className="space-y-8">
+        <div id="report-departamentos" className="space-y-8 print:p-0 bg-white rounded-xl p-8 is-report-container">
+          <div className="flex justify-end print:hidden">
+            <button 
+              onClick={() => handleDownloadPDF('report-departamentos', `Relatorio-Departamentos-${formulario?.nome}`)}
+              disabled={isGeneratingPDF}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" /> {isGeneratingPDF ? 'Gerando...' : 'Baixar PDF / Imprimir'}
+            </button>
+          </div>
+
+          <div className="report-header hidden print:block mb-8">
+            <div className="border-b-4 border-primary pb-6">
+              <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">Relatório de Desempenho por Departamento</h1>
+              <div className="flex justify-between items-center mt-2">
+                <p className="text-slate-600 font-bold text-lg">{formulario?.nome}</p>
+                <p className="text-slate-500 font-medium text-sm">{new Date().toLocaleDateString('pt-BR')}</p>
+              </div>
+            </div>
+          </div>
+
           {!hasMatrizData ? (
             <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">
               Nenhum dado de departamento encontrado ainda.
             </div>
           ) : (
-            matrizPerguntas.map(p => {
+            matrizPerguntas.map((p, pIdx) => {
               const stats = matrizMedias[p.id];
               if (!stats || stats.length === 0) return null;
               return (
-                <div key={p.id} className="space-y-4">
-                  <h2 className="text-base font-bold border-b pb-2">{p.texto}</h2>
+                <div key={p.id} className={`space-y-6 ${pIdx > 0 ? 'print:break-before-page print:pt-8' : ''}`}>
+                  <div className="report-header">
+                    <h2 className="text-base font-bold border-b pb-2 flex items-center gap-2">
+                      <div className="w-1.5 h-4 bg-primary rounded-full" />
+                      {p.texto}
+                    </h2>
+                  </div>
 
                   {/* Ranking table */}
-                  <div className="rounded-xl border bg-card overflow-auto">
+                  <div className="is-report-block rounded-xl border bg-card overflow-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50">
@@ -948,7 +1227,7 @@ export default function RespostasPage() {
                   </div>
 
                   {/* Bar Chart */}
-                  <div className="rounded-xl border bg-card p-5">
+                  <div className="is-report-block rounded-xl border bg-card p-5">
                     <h3 className="text-sm font-bold mb-4">Média por Departamento</h3>
                     <div className="h-[280px]">
                       <ResponsiveContainer width="100%" height="100%">
@@ -978,53 +1257,54 @@ export default function RespostasPage() {
 
       {/* ── Parecer Técnico Tab ────────────────────────────────────────────────── */}
       {activeTab === 'parecer' && (
-        <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+        <div id="report-parecer" className="space-y-8 animate-in fade-in duration-500 pb-12 is-report-container">
           <div className="flex justify-end print:hidden">
             <button 
-              onClick={() => window.print()} 
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity shadow-sm"
+              onClick={() => handleDownloadPDF('report-parecer', `Parecer-Tecnico-${formulario?.nome}`)}
+              disabled={isGeneratingPDF}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50"
             >
-              <Download className="h-4 w-4" /> Gerar PDF / Imprimir
+              <Download className="h-4 w-4" /> {isGeneratingPDF ? 'Gerando...' : 'Baixar PDF / Imprimir'}
             </button>
           </div>
 
-          <div className="bg-white text-slate-900 p-10 rounded-xl border shadow-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0">
+          <div className="bg-white text-slate-900 p-10 rounded-xl border shadow-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print:w-full">
             {/* Report Header */}
-            <div className="flex justify-between items-start border-b-2 border-slate-200 pb-8 mb-8">
+            <div className="report-header flex justify-between items-start border-b-2 border-slate-200 pb-8 mb-8">
               <div className="space-y-1">
                 <h1 className="text-2xl font-black uppercase tracking-tight text-slate-800">Parecer Técnico de Pesquisa</h1>
-                <p className="text-slate-500 font-medium">{formulario?.nome}</p>
+                <p className="text-slate-600 font-bold">{formulario?.nome}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Relatório Executivo</p>
-                <p className="text-sm text-slate-500">{new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Relatório Executivo</p>
+                <p className="text-sm text-slate-600 font-medium">{new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
               </div>
             </div>
 
             {/* Executive Summary Cards */}
-            <div className="grid grid-cols-3 gap-6 mb-10">
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Score NPS Geral</p>
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-3xl font-black ${npsColor(npsStats.score)}`}>{npsStats.score}</span>
-                  <span className={`text-[10px] font-bold uppercase ${npsColor(npsStats.score)}`}>{npsLabel(npsStats.score)}</span>
+            <section className="flex print-flex gap-4 mb-10 overflow-hidden">
+              <div className="flex-1 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Score NPS Geral</p>
+                <div className="space-y-1">
+                  <span className={`text-5xl font-black block leading-none ${npsColor(npsStats.score)}`}>{npsStats.score}</span>
+                  <span className={`text-[10px] font-black uppercase py-1 px-3 rounded-full bg-white border inline-block mt-2 ${npsColor(npsStats.score)}`}>{npsLabel(npsStats.score)}</span>
                 </div>
               </div>
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Amostragem</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-slate-700">{totalRespostas}</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Respostas</span>
+              <div className="flex-1 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Total de Respostas</p>
+                <div className="space-y-1">
+                  <span className="text-5xl font-black block leading-none text-slate-800">{totalRespostas}</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase inline-block mt-2">Participantes</span>
                 </div>
               </div>
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Engajamento</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-slate-700">{taxaConclusao}%</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Conclusão</span>
+              <div className="flex-1 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Engajamento</p>
+                <div className="space-y-1">
+                  <span className="text-5xl font-black block leading-none text-slate-800">{taxaConclusao}%</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase inline-block mt-2">Taxa de Conclusão</span>
                 </div>
               </div>
-            </div>
+            </section>
 
             <div className="space-y-12 font-sans">
               {/* Iteramos sobre cada pergunta de matriz para dar um parecer individualizado se houver mais de uma */}
@@ -1033,7 +1313,7 @@ export default function RespostasPage() {
                 if (!stats || stats.length === 0) return null;
 
                 return (
-                  <section key={p.id} className={pIdx > 0 ? "pt-10 border-t border-slate-100" : ""}>
+                  <section key={p.id} className={`print:break-inside-avoid ${pIdx > 0 ? "pt-10 border-t border-slate-100 print:break-before-page print:pt-8" : ""}`}>
                     <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 uppercase tracking-widest mb-6">
                       <div className="w-1.5 h-5 bg-primary rounded-full" /> 
                       Análise: {p.texto}
@@ -1153,7 +1433,7 @@ export default function RespostasPage() {
               )}
 
               {/* Technical Conclusion */}
-              <section className="bg-slate-900 text-slate-100 p-8 rounded-2xl shadow-xl relative overflow-hidden">
+              <section className="bg-slate-900 text-slate-100 p-8 rounded-2xl shadow-xl relative overflow-hidden report-footer">
                 <div className="absolute top-0 right-0 p-4 opacity-10">
                   <FileText className="h-24 w-24" />
                 </div>
@@ -1181,7 +1461,7 @@ export default function RespostasPage() {
               </section>
 
               {/* ── Memória de Cálculo ────────────────────────────────────────────────── */}
-              <div className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100">
+              <section className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100 print:pt-8 is-report-block">
                 <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 mb-8 flex items-center gap-3">
                   <div className="w-2 h-8 bg-primary rounded-sm" />
                   Memória de Cálculo e Metodologia
@@ -1306,7 +1586,7 @@ export default function RespostasPage() {
               </div>
             </div>
             {/* Page 2 - Methodology and Detailed Results */}
-            <div className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100">
+            <section className="print:break-before-page mt-12 pt-12 border-t-2 border-slate-100 print:pt-8 is-report-block">
               <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 mb-8 flex items-center gap-3">
                 <div className="w-2 h-8 bg-slate-800 rounded-sm" />
                 Detalhamento Meta-Analítico
@@ -1427,7 +1707,7 @@ export default function RespostasPage() {
               </div>
 
               {/* Qualitative Responses (Direct Answers Table) */}
-              <div className="mt-12 pt-12 border-t border-slate-100 print:break-before-page">
+              <section className="mt-12 pt-12 border-t border-slate-100 print:break-before-page print:pt-8 is-report-block">
                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-800 mb-6 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-primary" />
                   Consolidado Qualitativo (Detalhamento de Respostas)

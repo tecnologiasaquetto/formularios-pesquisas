@@ -4,7 +4,7 @@ import type { Database } from '@/types/supabase'
 // Configuração de variáveis de ambiente para Vite
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.REACT_APP_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.REACT_APP_SUPABASE_ANON_KEY || '';
-const supabaseServiceRoleKey = '';
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || import.meta.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Supabase configurado
 
@@ -14,24 +14,26 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Faltam variáveis de ambiente do Supabase')
 }
 
-// Cliente padrão para usuários autenticados (usa localStorage)
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
-
-// Cliente para rotas públicas (não usa localStorage, evita erro de Auth Lock)
-export const supabasePublic = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+// Cliente único para evitar múltiplas instâncias de GoTrue e conflitos de Lock
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    lock: false
   }
 })
 
-// Cliente admin usando a Service Role Key (Atenção: só deve ser usado para funções administrativas específicas)
+// Reutilizamos a mesma instância para rotas públicas
+export const supabasePublic = supabase
+
+// Cliente admin usando a Service Role Key (apenas se a chave estiver presente)
 export const supabaseAdmin = supabaseServiceRoleKey 
   ? createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         autoRefreshToken: false,
-        persistSession: false
+        persistSession: false,
+        lock: false
       }
     })
   : null
