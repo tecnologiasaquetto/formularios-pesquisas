@@ -1699,14 +1699,13 @@ export default function RespostasPage() {
                             </span>
                             <span className="text-[8px] font-normal text-slate-400 ml-1">(Score NPS)</span>
                           </div>
-                        </div>
+                        </section>
                       );
                     })}
                   </div>
                 </div>
-              </div>
 
-              {/* Qualitative Responses (Direct Answers Table) */}
+                {/* Qualitative Responses (Direct Answers Table) */}
               <section className="mt-12 pt-12 border-t border-slate-100 print:break-before-page print:pt-8 is-report-block">
                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-800 mb-6 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-primary" />
@@ -1819,7 +1818,7 @@ export default function RespostasPage() {
                     * Exibindo as primeiras 50 respostas e até 8 colunas de dados. O relatório completo requer exportação CSV.
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
             
             <p className="text-center text-[10px] text-slate-400 mt-12">
