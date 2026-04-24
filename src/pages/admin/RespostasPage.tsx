@@ -365,19 +365,21 @@ export default function RespostasPage() {
         matrizPerguntas.forEach(p => {
           const stats = matrizMedias[p.id] || [];
           stats.forEach(m => {
-            const valid   = m.avaliacoes;
-            const prom    = m.promotores || 0;
-            const detr    = m.detratores || 0;
-            const passiv  = valid - prom - detr;
-            const promPct = valid > 0 ? Math.round((prom / valid) * 100) : 0;
-            const detrPct = valid > 0 ? Math.round((detr / valid) * 100) : 0;
-            const passPct = valid > 0 ? Math.round((passiv / valid) * 100) : 0;
-            const somaNotas = Math.round(m.media * valid * 10) / 10;
+            const valid    = m.avaliacoes;
+            const prom     = m.promotores || 0;
+            const detr     = m.detratores || 0;
+            const passiv   = valid - prom - detr;
+            const promPct  = valid > 0 ? Math.round((prom / valid) * 100) : 0;
+            const detrPct  = valid > 0 ? Math.round((detr / valid) * 100) : 0;
+            const passPct  = valid > 0 ? Math.round((passiv / valid) * 100) : 0;
+            // Arredondar media para 1 casa decimal (evita 8.923076923076923)
+            const media1d  = parseFloat(m.media.toFixed(1));
+            const somaNotas = parseFloat((m.media * valid).toFixed(1));
             const scoreNps  = m.scoreNps ?? (promPct - detrPct);
 
             const zona =
               scoreNps >= 75 ? 'Excelência (75-100)' :
-              scoreNps >= 50 ? 'Qualidade (50-74)' :
+              scoreNps >= 50 ? 'Qualidade (50-74)'   :
               scoreNps >= 0  ? 'Aperfeiçoamento (0-49)' :
               'Crítica (-100 a -1)';
 
@@ -387,7 +389,7 @@ export default function RespostasPage() {
               valid,
               m.na ?? 0,
               somaNotas,
-              `${somaNotas} ÷ ${valid} = ${m.media}`,
+              `${somaNotas} ÷ ${valid} = ${media1d}`,
               prom,
               `${promPct}%`,
               passiv,
