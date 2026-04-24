@@ -1176,19 +1176,19 @@ export default function RespostasPage() {
                                 <span className="text-muted-foreground text-xs">/10</span>
                               </td>
                               <td className="px-4 py-3 text-center">
-                                {m.scoreNps !== null ? (
-                                  <div className="flex flex-col items-center group relative cursor-help">
-                                    <span className={`font-bold text-sm ${m.scoreNps >= 50 ? 'text-emerald-500' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-destructive'}`}>
-                                      {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
-                                    </span>
-                                    <span className="text-[8px] text-muted-foreground underline decoration-dotted">Ver cálculo</span>
-                                    
-                                    {/* Tooltip Memória de Cálculo */}
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-3 bg-popover border rounded-xl shadow-2xl z-50">
-                                      <p className="text-[9px] font-bold border-b pb-1 mb-2">Memória: {m.linha}</p>
-                                      <div className="space-y-1.5 text-[9px] text-left">
-                                        <div className="flex justify-between">
-                                          <span className="text-emerald-600">Promotores:</span>
+                                  {m.scoreNps !== null ? (
+                                    <div className="flex flex-col items-center group relative cursor-help hover:z-[110]">
+                                      <span className={`font-bold text-sm ${m.scoreNps >= 50 ? 'text-emerald-500' : m.scoreNps >= 0 ? 'text-amber-500' : 'text-destructive'}`}>
+                                        {m.scoreNps > 0 ? '+' : ''}{m.scoreNps}
+                                      </span>
+                                      <span className="text-[8px] text-muted-foreground underline decoration-dotted">Ver cálculo</span>
+                                      
+                                      {/* Tooltip Memória de Cálculo - Aumentado z-index e garantido que fique acima */}
+                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover:block w-48 p-3 bg-popover border rounded-xl shadow-2xl z-[100] animate-in fade-in slide-in-from-bottom-1 duration-200">
+                                        <p className="text-[9px] font-bold border-b pb-1 mb-2 text-primary">Memória: {m.linha}</p>
+                                        <div className="space-y-1.5 text-[9px] text-left">
+                                          <div className="flex justify-between">
+                                            <span className="text-emerald-600 font-medium">Promotores:</span>
                                           <span className="font-bold">{m.promotores || 0}</span>
                                         </div>
                                         <div className="flex justify-between">
@@ -1284,24 +1284,24 @@ export default function RespostasPage() {
             {/* Executive Summary Cards */}
             <section className="flex print-flex gap-4 mb-10 overflow-hidden">
               <div className="flex-1 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Score NPS Geral</p>
-                <div className="space-y-1">
-                  <span className={`text-5xl font-black block leading-none ${npsColor(npsStats.score)}`}>{npsStats.score}</span>
-                  <span className={`text-[10px] font-black uppercase py-1 px-3 rounded-full bg-white border inline-block mt-2 ${npsColor(npsStats.score)}`}>{npsLabel(npsStats.score)}</span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Score NPS Geral</p>
+                <div className="flex flex-col items-center">
+                  <span className={`text-5xl font-black block leading-tight ${npsColor(npsStats.score)}`}>{npsStats.score}</span>
+                  <span className={`text-[10px] font-black uppercase py-1.5 px-4 rounded-full bg-white border inline-block mt-2 shadow-sm ${npsColor(npsStats.score)}`}>{npsLabel(npsStats.score)}</span>
                 </div>
               </div>
               <div className="flex-1 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Total de Respostas</p>
-                <div className="space-y-1">
-                  <span className="text-5xl font-black block leading-none text-slate-800">{totalRespostas}</span>
-                  <span className="text-[10px] font-black text-slate-400 uppercase inline-block mt-2">Participantes</span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Total de Respostas</p>
+                <div className="flex flex-col items-center">
+                  <span className="text-5xl font-black block leading-tight text-slate-800">{totalRespostas}</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase inline-block mt-3 tracking-widest">Participantes</span>
                 </div>
               </div>
               <div className="flex-1 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Engajamento</p>
-                <div className="space-y-1">
-                  <span className="text-5xl font-black block leading-none text-slate-800">{taxaConclusao}%</span>
-                  <span className="text-[10px] font-black text-slate-400 uppercase inline-block mt-2">Taxa de Conclusão</span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Engajamento</p>
+                <div className="flex flex-col items-center">
+                  <span className="text-5xl font-black block leading-tight text-slate-800">{taxaConclusao}%</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase inline-block mt-3 tracking-widest">Taxa de Conclusão</span>
                 </div>
               </div>
             </section>
