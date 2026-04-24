@@ -312,9 +312,15 @@ export default function RespostasPage() {
     try {
       const wb = utils.book_new();
 
-      // 1. Sheet Resumo
-      const resumoData = [
+      // Helper: apply column widths
+      const setColWidths = (ws: ReturnType<typeof utils.aoa_to_sheet>, widths: number[]) => {
+        ws['!cols'] = widths.map(w => ({ wch: w }));
+      };
+
+      // ── 1. Sheet Resumo ──────────────────────────────────────────────────────
+      const resumoData: (string | number)[][] = [
         ['Resumo do Relatório - ' + (formulario?.nome || '')],
+        ['Exportado em: ' + new Date().toLocaleString('pt-BR')],
         [''],
         ['KPI', 'Valor', 'Descrição'],
         ['Total de Respostas', totalRespostas, 'Volume total de participações'],
@@ -323,34 +329,87 @@ export default function RespostasPage() {
         [''],
         ['Distribuição NPS', 'Quantidade', 'Percentual'],
         ['Promotores (9-10)', npsStats?.promotores || 0, npsStats?.total ? Math.round((npsStats.promotores / npsStats.total) * 100) + '%' : '0%'],
-        ['Passivos (7-8)', npsStats?.passivos || 0, npsStats?.total ? Math.round((npsStats.passivos / npsStats.total) * 100) + '%' : '0%'],
+        ['Passivos (7-8)',    npsStats?.passivos || 0,   npsStats?.total ? Math.round((npsStats.passivos / npsStats.total) * 100) + '%' : '0%'],
         ['Detratores (0-6)', npsStats?.detratores || 0, npsStats?.total ? Math.round((npsStats.detratores / npsStats.total) * 100) + '%' : '0%'],
+        [''],
+        ['Fórmula NPS', '% Promotores - % Detratores', 'Score varia de -100 a +100'],
       ];
       const wsResumo = utils.aoa_to_sheet(resumoData);
-      utils.book_append_sheet(wb, wsResumo, "Resumo");
+      setColWidths(wsResumo, [35, 20, 45]);
+      utils.book_append_sheet(wb, wsResumo, 'Resumo');
 
-      // 2. Sheet Ranking por Depto (if matrix exists)
+      // ── 2. Sheet Ranking por Depto ─────────────────────────────────────────
       if (hasMatriz) {
-        const rankingData = [['Pergunta', 'Departamento', 'Média', 'Score NPS', 'Avaliações', 'N/A']];
+        const rankingHeaders = [
+          'Pergunta',
+          'Departamento / Setor',
+          'Avaliações Válidas',
+          'N/A (Não se Aplica)',
+          // Memória de Cálculo - Média
+          'Soma das Notas',
+          'Média (Soma ÷ Avaliações)',
+          // Memória de Cálculo - Score NPS
+          'Promotores (9-10) — Qtd',
+          'Promotores — %',
+          'Passivos (7-8) — Qtd',
+          'Passivos — %',
+          'Detratores (0-6) — Qtd',
+          'Detratores — %',
+          'Fórmula NPS (%Prom - %Detr)',
+          'Score NPS Final',
+          'Zona de Desempenho',
+        ];
+
+        const rankingRows: (string | number)[][] = [rankingHeaders];
+
         matrizPerguntas.forEach(p => {
           const stats = matrizMedias[p.id] || [];
           stats.forEach(m => {
-            rankingData.push([
+            const valid   = m.avaliacoes;
+            const prom    = m.promotores || 0;
+            const detr    = m.detratores || 0;
+            const passiv  = valid - prom - detr;
+            const promPct = valid > 0 ? Math.round((prom / valid) * 100) : 0;
+            const detrPct = valid > 0 ? Math.round((detr / valid) * 100) : 0;
+            const passPct = valid > 0 ? Math.round((passiv / valid) * 100) : 0;
+            const somaNotas = Math.round(m.media * valid * 10) / 10;
+            const scoreNps  = m.scoreNps ?? (promPct - detrPct);
+
+            const zona =
+              scoreNps >= 75 ? 'Excelência (75-100)' :
+              scoreNps >= 50 ? 'Qualidade (50-74)' :
+              scoreNps >= 0  ? 'Aperfeiçoamento (0-49)' :
+              'Crítica (-100 a -1)';
+
+            rankingRows.push([
               p.texto,
               m.linha,
-              m.media,
-              m.scoreNps || 0,
-              m.avaliacoes,
-              m.na
+              valid,
+              m.na ?? 0,
+              somaNotas,
+              `${somaNotas} ÷ ${valid} = ${m.media}`,
+              prom,
+              `${promPct}%`,
+              passiv,
+              `${passPct}%`,
+              detr,
+              `${detrPct}%`,
+              `${promPct}% - ${detrPct}% = ${scoreNps}`,
+              scoreNps,
+              zona,
             ]);
           });
         });
-        const wsRanking = utils.aoa_to_sheet(rankingData);
-        utils.book_append_sheet(wb, wsRanking, "Ranking por Depto");
+
+        const wsRanking = utils.aoa_to_sheet(rankingRows);
+        setColWidths(wsRanking, [40, 25, 18, 18, 14, 28, 22, 16, 20, 16, 22, 16, 30, 16, 28]);
+        utils.book_append_sheet(wb, wsRanking, 'Ranking por Depto');
       }
 
-      // 3. Sheet Dados por Pergunta
-      const perguntasData = [['ID', 'Pergunta', 'Tipo', 'Total Respostas', 'Score NPS', 'Promotores', 'Passivos', 'Detratores']];
+      // ── 3. Sheet Dados por Pergunta ──────────────────────────────────────────
+      const perguntasData: (string | number)[][] = [
+        ['ID', 'Pergunta', 'Tipo', 'Total Respostas', 'Score NPS', 'Promotores', 'Passivos', 'Detratores'],
+      ];
       perguntas.filter(p => !['secao'].includes(p.tipo)).forEach(p => {
         const stats = getPerguntaStats(p.id);
         perguntasData.push([
@@ -361,37 +420,82 @@ export default function RespostasPage() {
           (p.tipo === 'matriz_nps' || p.tipo === 'nps_simples') ? stats.score : 'N/A',
           stats.promotores,
           stats.passivos,
-          stats.detratores
+          stats.detratores,
         ]);
       });
       const wsPerguntas = utils.aoa_to_sheet(perguntasData);
-      utils.book_append_sheet(wb, wsPerguntas, "Dados por Pergunta");
+      setColWidths(wsPerguntas, [36, 55, 18, 18, 14, 14, 14, 14]);
+      utils.book_append_sheet(wb, wsPerguntas, 'Dados por Pergunta');
 
-      // 4. Sheet Respostas Brutas
-      const headers = ['#', 'Data', 'Respondente', 'E-mail', 'Departamento',
-        ...perguntas.filter(p => p.tipo !== 'secao').map(p => p.texto)];
-      const rows = filteredRespostas.map((r, i) => {
-        const base = [
+      // ── 4. Sheet Respostas Brutas ─────────────────────────────────────────
+      // Para perguntas de matriz_nps, criamos uma coluna por linha/setor
+      type ColDef = { label: string; perguntaId: string; tipo: string; matrizLinha?: string };
+      const colDefs: ColDef[] = [];
+
+      perguntas.filter(p => p.tipo !== 'secao').forEach(p => {
+        if (p.tipo === 'matriz_nps') {
+          const rows = (p.opcoes as any)?.rows || [];
+          rows.forEach((row: string) => {
+            colDefs.push({
+              label: `${p.texto} → ${row}`,
+              perguntaId: p.id,
+              tipo: p.tipo,
+              matrizLinha: row,
+            });
+          });
+        } else {
+          colDefs.push({ label: p.texto, perguntaId: p.id, tipo: p.tipo });
+        }
+      });
+
+      const brutasHeaders = ['#', 'Data', 'Hora', 'Respondente', 'E-mail', 'Departamento', 'Status', ...colDefs.map(c => c.label)];
+
+      const brutasRows = filteredRespostas.map((r, i) => {
+        const base: (string | number)[] = [
           i + 1,
-          new Date(r.criado_em).toLocaleString('pt-BR'),
+          new Date(r.criado_em).toLocaleDateString('pt-BR'),
+          new Date(r.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           r.respondente_nome || 'Anônimo',
           r.respondente_email || '',
-          r.respondente_departamento || ''
+          r.respondente_departamento || '',
+          r.finalizado ? 'Finalizado' : 'Incompleto',
         ];
-        const answers = perguntas.filter(p => p.tipo !== 'secao').map(p => {
-          const items = respostaItens.filter(ri => ri.resposta_id === r.id && ri.pergunta_id === p.id);
-          return items.map(ri => {
+
+        const answers = colDefs.map(col => {
+          const itens = respostaItens.filter(ri => ri.resposta_id === r.id && ri.pergunta_id === col.perguntaId);
+          if (col.matrizLinha) {
+            // Pega somente o item que corresponde a essa linha de matriz
+            const match = itens.find(ri => {
+              try {
+                const parsed = JSON.parse(ri.valor);
+                return parsed?.linha === col.matrizLinha;
+              } catch { return false; }
+            });
+            if (!match) return '—';
             try {
-              const parsed = JSON.parse(ri.valor);
-              if (parsed && 'linha' in parsed) return `${parsed.linha}: ${parsed.is_na ? 'N/A' : parsed.nota}`;
-            } catch {}
-            return ri.valor || '';
-          }).join(' | ');
+              const parsed = JSON.parse(match.valor);
+              return parsed.is_na ? 'N/A' : parsed.nota;
+            } catch {
+              return match.valor || '—';
+            }
+          } else {
+            // Pergunta comum
+            return itens.map(ri => {
+              try {
+                const parsed = JSON.parse(ri.valor);
+                if (parsed && 'linha' in parsed) return `${parsed.linha}: ${parsed.is_na ? 'N/A' : parsed.nota}`;
+              } catch {}
+              return ri.valor || '';
+            }).join(', ') || '—';
+          }
         });
+
         return [...base, ...answers];
       });
-      const wsRespostas = utils.aoa_to_sheet([headers, ...rows]);
-      utils.book_append_sheet(wb, wsRespostas, "Respostas Brutas");
+
+      const wsRespostas = utils.aoa_to_sheet([brutasHeaders, ...brutasRows]);
+      setColWidths(wsRespostas, [5, 12, 8, 22, 28, 22, 12, ...colDefs.map(() => 22)]);
+      utils.book_append_sheet(wb, wsRespostas, 'Respostas Brutas');
 
       // Export
       writeFile(wb, `${formulario?.slug || 'relatorio'}-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -401,6 +505,7 @@ export default function RespostasPage() {
       toast.error('Erro ao exportar Excel');
     }
   };
+
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
