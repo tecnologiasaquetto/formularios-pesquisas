@@ -428,21 +428,48 @@ export default function RespostasPage() {
       utils.book_append_sheet(wb, wsPerguntas, 'Dados por Pergunta');
 
       // ── 4. Sheet Respostas Brutas ─────────────────────────────────────────
-      // Para perguntas de matriz_nps, criamos uma coluna por linha/setor
+      // Monta colunas dinamicamente a partir dos dados reais:
+      // • Perguntas comuns → 1 coluna por pergunta
+      // • Perguntas matriz_nps → 1 coluna por linha/setor (derivado dos dados)
       type ColDef = { label: string; perguntaId: string; tipo: string; matrizLinha?: string };
       const colDefs: ColDef[] = [];
 
       perguntas.filter(p => p.tipo !== 'secao').forEach(p => {
         if (p.tipo === 'matriz_nps') {
-          const rows = (p.opcoes as any)?.rows || [];
-          rows.forEach((row: string) => {
-            colDefs.push({
-              label: `${p.texto} → ${row}`,
-              perguntaId: p.id,
-              tipo: p.tipo,
-              matrizLinha: row,
+          // Tenta primeiro pelas opções cadastradas (ordem correta)
+          const opcoesRows: string[] = (p.opcoes as any)?.rows || [];
+
+          // Fallback: deriva linhas únicas dos dados reais de resposta
+          const dataRows = opcoesRows.length > 0 ? opcoesRows : (() => {
+            const seen = new Set<string>();
+            const rows: string[] = [];
+            respostaItens
+              .filter(ri => ri.pergunta_id === p.id)
+              .forEach(ri => {
+                try {
+                  const parsed = JSON.parse(ri.valor);
+                  if (parsed?.linha && !seen.has(parsed.linha)) {
+                    seen.add(parsed.linha);
+                    rows.push(parsed.linha);
+                  }
+                } catch {}
+              });
+            return rows;
+          })();
+
+          if (dataRows.length > 0) {
+            dataRows.forEach((row: string) => {
+              colDefs.push({
+                label: `${p.texto} → ${row}`,
+                perguntaId: p.id,
+                tipo: p.tipo,
+                matrizLinha: row,
+              });
             });
-          });
+          } else {
+            // Se não encontrou linhas, coloca uma coluna genérica
+            colDefs.push({ label: p.texto, perguntaId: p.id, tipo: p.tipo });
+          }
         } else {
           colDefs.push({ label: p.texto, perguntaId: p.id, tipo: p.tipo });
         }
@@ -463,30 +490,35 @@ export default function RespostasPage() {
 
         const answers = colDefs.map(col => {
           const itens = respostaItens.filter(ri => ri.resposta_id === r.id && ri.pergunta_id === col.perguntaId);
+
           if (col.matrizLinha) {
-            // Pega somente o item que corresponde a essa linha de matriz
+            // Uma coluna por linha de matriz — busca pelo campo "linha" no JSON
             const match = itens.find(ri => {
               try {
                 const parsed = JSON.parse(ri.valor);
                 return parsed?.linha === col.matrizLinha;
               } catch { return false; }
             });
-            if (!match) return '—';
+            if (!match) return '';
             try {
               const parsed = JSON.parse(match.valor);
-              return parsed.is_na ? 'N/A' : parsed.nota;
+              return parsed.is_na ? 'N/A' : String(parsed.nota ?? '');
             } catch {
-              return match.valor || '—';
+              return match.valor || '';
             }
           } else {
-            // Pergunta comum
+            // Pergunta comum (texto, radio, checkbox, nps_simples…)
+            if (itens.length === 0) return '';
             return itens.map(ri => {
               try {
                 const parsed = JSON.parse(ri.valor);
-                if (parsed && 'linha' in parsed) return `${parsed.linha}: ${parsed.is_na ? 'N/A' : parsed.nota}`;
+                // Segurança: se chegou um objeto de matriz aqui, formata de jeito legível
+                if (parsed && typeof parsed === 'object' && 'linha' in parsed) {
+                  return `${parsed.linha}: ${parsed.is_na ? 'N/A' : parsed.nota}`;
+                }
               } catch {}
               return ri.valor || '';
-            }).join(', ') || '—';
+            }).join('; ');
           }
         });
 
@@ -494,8 +526,9 @@ export default function RespostasPage() {
       });
 
       const wsRespostas = utils.aoa_to_sheet([brutasHeaders, ...brutasRows]);
-      setColWidths(wsRespostas, [5, 12, 8, 22, 28, 22, 12, ...colDefs.map(() => 22)]);
+      setColWidths(wsRespostas, [5, 12, 8, 25, 30, 25, 12, ...colDefs.map(() => 24)]);
       utils.book_append_sheet(wb, wsRespostas, 'Respostas Brutas');
+
 
       // Export
       writeFile(wb, `${formulario?.slug || 'relatorio'}-${new Date().toISOString().slice(0, 10)}.xlsx`);
