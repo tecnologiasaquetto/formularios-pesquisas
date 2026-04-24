@@ -1826,7 +1826,8 @@ export default function RespostasPage() {
             </p>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* ── Divulgação Tab ────────────────────────────────────────────────── */}
       {activeTab === 'divulgacao' && (
